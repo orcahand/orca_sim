@@ -2,11 +2,11 @@
 <mujoco model="orcahand scene">
   
   <!-- Camera placement -->
-  <statistic extent="0.3" center="0 0 0.15"/>
+  <statistic extent="0.3" center="0.1 0.1 0.15"/>
   <visual>
     <rgba haze="0.15 0.25 0.35 1"/>
     <quality shadowsize="8192"/>
-    <global azimuth="220" elevation="-30"/>
+    <global fovy="60" azimuth="270" elevation="-40"/>
   </visual>
 
   <!-- Background -->
