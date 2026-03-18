@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "orca_sim"
 version = "0.1.0"
-description = "Minimal MuJoCo-only Orcahand repository with left, right, and combined Gymnasium environments."
+description = "ORCA hand simulation environment using Gymnasium and Mujoco."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
@@ -17,6 +17,15 @@ dependencies = [
   "numpy>=1.26",
 ]
 
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 include-package-data = true
@@ -27,10 +36,12 @@ where = ["src"]
 [tool.setuptools.package-data]
 orca_sim = [
   "*.xml",
+  "scenes/*/*.xml",
   "assets/mjcf/*.xml",
   "assets/mjcf/left/visual/*.stl",
   "assets/mjcf/left/collision/*.stl",
   "assets/mjcf/right/visual/*.stl",
   "assets/mjcf/right/collision/*.stl",
   "models/mjcf/*.mjcf",
+  "models/*/*.mjcf",
 ]
