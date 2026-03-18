@@ -1,19 +1,25 @@
-from .envs import (
-    CombinedOrcaHandEnv,
-    LeftOrcaHandEnv,
-    OrcaHandCombined,
-    OrcaHandLeft,
-    OrcaHandRight,
-    RightOrcaHandEnv,
+from orca_sim.versions import (
+    latest_version,
+    list_versions,
 )
-from .registry import register_envs
+from orca_sim.envs import (
+    OrcaHandCombined,
+    OrcaHandCombinedExtended,
+    OrcaHandLeft,
+    OrcaHandLeftExtended,
+    OrcaHandRight,
+    OrcaHandRightExtended,
+)
+from orca_sim.registry import register_envs
 
 __all__ = [
     "OrcaHandCombined",
+    "OrcaHandCombinedExtended",
     "OrcaHandLeft",
+    "OrcaHandLeftExtended",
     "OrcaHandRight",
-    "CombinedOrcaHandEnv",
-    "LeftOrcaHandEnv",
-    "RightOrcaHandEnv",
+    "OrcaHandRightExtended",
+    "latest_version",
+    "list_versions",
     "register_envs",
 ]

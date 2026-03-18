@@ -1,7 +1,4 @@
-from __future__ import annotations
-
 import sys
-from pathlib import Path
 from typing import Any
 
 import gymnasium as gym
@@ -9,16 +6,19 @@ import mujoco
 import numpy as np
 from gymnasium import spaces
 
-
-PACKAGE_ROOT = Path(__file__).resolve().parent
+from orca_sim.versions import (
+    resolve_version,
+    resolve_scene_path,
+)
 
 
 class BaseOrcaHandEnv(gym.Env[np.ndarray, np.ndarray]):
-    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 60}
+    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 30}
 
     def __init__(
         self,
         scene_file: str,
+        version: str | None = None,
         frame_skip: int = 5,
         render_mode: str | None = None,
     ) -> None:
@@ -26,10 +26,8 @@ class BaseOrcaHandEnv(gym.Env[np.ndarray, np.ndarray]):
         if render_mode not in {None, "human", "rgb_array"}:
             raise ValueError(f"Unsupported render_mode: {render_mode}")
 
-        self.scene_path = PACKAGE_ROOT / scene_file
-        if not self.scene_path.exists():
-            raise FileNotFoundError(f"Scene file not found: {self.scene_path}")
-
+        self.version = resolve_version(version)
+        self.scene_path = resolve_scene_path(scene_file, version=self.version)
         self.frame_skip = frame_skip
         self.render_mode = render_mode
 
@@ -149,6 +147,8 @@ class BaseOrcaHandEnv(gym.Env[np.ndarray, np.ndarray]):
                             "for an offscreen smoke test."
                         ) from exc
                     raise
+                # Force viewer free-camera to scene.xml defaults on startup.
+                mujoco.mjv_defaultFreeCamera(self.model, self._viewer.cam)
             self._viewer.sync()
             return None
 
@@ -164,24 +164,85 @@ class BaseOrcaHandEnv(gym.Env[np.ndarray, np.ndarray]):
 
 
 class OrcaHandLeft(BaseOrcaHandEnv):
-    def __init__(self, frame_skip: int = 5, render_mode: str | None = None) -> None:
-        super().__init__("scene_left.xml", frame_skip=frame_skip, render_mode=render_mode)
-
-
-class OrcaHandRight(BaseOrcaHandEnv):
-    def __init__(self, frame_skip: int = 5, render_mode: str | None = None) -> None:
-        super().__init__("scene_right.xml", frame_skip=frame_skip, render_mode=render_mode)
-
-
-class OrcaHandCombined(BaseOrcaHandEnv):
-    def __init__(self, frame_skip: int = 5, render_mode: str | None = None) -> None:
+    def __init__(
+        self,
+        render_mode: str | None = None,
+        version: str | None = None,
+    ) -> None:
         super().__init__(
-            "scene_combined.xml",
-            frame_skip=frame_skip,
+            "scene_left.xml",
+            version=version,
+            frame_skip=5,
             render_mode=render_mode,
         )
 
 
-LeftOrcaHandEnv = OrcaHandLeft
-RightOrcaHandEnv = OrcaHandRight
-CombinedOrcaHandEnv = OrcaHandCombined
+class OrcaHandRight(BaseOrcaHandEnv):
+    def __init__(
+        self,
+        render_mode: str | None = None,
+        version: str | None = None,
+    ) -> None:
+        super().__init__(
+            "scene_right.xml",
+            version=version,
+            frame_skip=5,
+            render_mode=render_mode,
+        )
+
+
+class OrcaHandCombined(BaseOrcaHandEnv):
+    def __init__(
+        self,
+        render_mode: str | None = None,
+        version: str | None = None,
+    ) -> None:
+        super().__init__(
+            "scene_combined.xml",
+            version=version,
+            frame_skip=5,
+            render_mode=render_mode,
+        )
+
+
+class OrcaHandLeftExtended(BaseOrcaHandEnv):
+    def __init__(
+        self,
+        render_mode: str | None = None,
+        version: str | None = None,
+    ) -> None:
+        super().__init__(
+            "scene_left_extended.xml",
+            version=version,
+            frame_skip=5,
+            render_mode=render_mode,
+        )
+
+
+class OrcaHandRightExtended(BaseOrcaHandEnv):
+    def __init__(
+        self,
+        render_mode: str | None = None,
+        version: str | None = None,
+    ) -> None:
+        super().__init__(
+            "scene_right_extended.xml",
+            version=version,
+            frame_skip=5,
+            render_mode=render_mode,
+        )
+
+
+class OrcaHandCombinedExtended(BaseOrcaHandEnv):
+    def __init__(
+        self,
+        render_mode: str | None = None,
+        version: str | None = None,
+    ) -> None:
+        super().__init__(
+            "scene_combined_extended.xml",
+            version=version,
+            frame_skip=5,
+            render_mode=render_mode,
+        )
+
