@@ -1,3 +1,6 @@
+from pathlib import Path
+
+import mujoco
 import pytest
 
 from orca_sim.versions import (
@@ -41,3 +44,23 @@ def test_scene_paths_exist_for_each_scene(scene_file: str) -> None:
 def test_resolve_version_rejects_unknown_versions() -> None:
     with pytest.raises(FileNotFoundError, match="Unknown embodiment version"):
         resolve_version("does-not-exist")
+
+
+@pytest.mark.parametrize(
+    "scene_path",
+    [
+        "src/orca_sim/scenes/v1/scene_left.xml",
+        "src/orca_sim/scenes/v1/scene_right.xml",
+        "src/orca_sim/scenes/v1/scene_combined.xml",
+        "src/orca_sim/scenes/v1/scene_left_extended.xml",
+        "src/orca_sim/scenes/v1/scene_right_extended.xml",
+        "src/orca_sim/scenes/v1/scene_combined_extended.xml",
+        "src/orca_sim/scenes/v1/scene_right_cube_orientation.xml",
+        "src/orca_sim/scenes/v2/scene_left.xml",
+        "src/orca_sim/scenes/v2/scene_right.xml",
+        "src/orca_sim/scenes/v2/scene_combined.xml",
+        "src/orca_sim/scenes/v2/scene_right_cube_orientation.xml",
+    ],
+)
+def test_scene_paths_load_directly(scene_path: str) -> None:
+    mujoco.MjModel.from_xml_path(str(Path(scene_path)))

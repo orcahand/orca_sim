@@ -7,7 +7,6 @@ import numpy as np
 from gymnasium import spaces
 
 from orca_sim.versions import (
-    resolve_version,
     resolve_scene_path,
 )
 
@@ -26,8 +25,8 @@ class BaseOrcaHandEnv(gym.Env[np.ndarray, np.ndarray]):
         if render_mode not in {None, "human", "rgb_array"}:
             raise ValueError(f"Unsupported render_mode: {render_mode}")
 
-        self.version = resolve_version(version)
-        self.scene_path = resolve_scene_path(scene_file, version=self.version)
+        self.scene_path = resolve_scene_path(scene_file, version=version)
+        self.version = self.scene_path.parent.name
         self.frame_skip = frame_skip
         self.render_mode = render_mode
 
