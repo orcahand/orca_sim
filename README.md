@@ -93,3 +93,48 @@ env = OrcaHandCombinedExtended(version="v1")  # loads the v1 hand
 ```
 
 See our [`random_policy.py`](random_policy.py) example to see how to instantiate and interface an ORCA hand.
+
+## Sample task: in-hand cube orientation
+
+`orca_sim` now also ships a task-level example that augments the right hand with a free-floating cube whose one target face is colored red:
+
+```python
+from orca_sim import OrcaHandRightCubeOrientation
+
+env = OrcaHandRightCubeOrientation(version="v2", render_mode="human")
+obs, info = env.reset(seed=0)
+```
+
+By default, the task resets to a palm-up open-hand pose with the cube resting on the palm and the red face pointing downward. You can also randomize the initial cube orientation while keeping it unsolved:
+
+```python
+env = OrcaHandRightCubeOrientation(
+    version="v2",
+    initial_red_face="random",
+    cube_pos_xy_jitter=0.01,
+)
+obs, info = env.reset(seed=0)
+```
+
+If you want to keep the environment completely deterministic while you are still building it, you can use the nominal reset directly and add randomization later:
+
+```python
+env = OrcaHandRightCubeOrientation(version="v2")
+
+nominal = env.nominal_reset_options()
+obs, info = env.reset(options=nominal)
+
+randomized = env.sample_randomized_reset_options(
+    seed=0,
+    initial_red_face="random",
+    cube_pos_xy_jitter=0.01,
+)
+obs, info = env.reset(options=randomized)
+```
+
+The implementation is intentionally split so it doubles as a porting template:
+
+- The task scene lives in [`src/orca_sim/scenes/v2/scene_right_cube_orientation.xml`](src/orca_sim/scenes/v2/scene_right_cube_orientation.xml) and composes the existing hand MJCF with a single task cube.
+- The nominal palm-up hand pose and in-palm cube spawn are now authored into the task-specific scene/model files, so opening the XML directly in MuJoCo shows the intended setup.
+- The task logic lives in [`src/orca_sim/task_envs.py`](src/orca_sim/task_envs.py), including reset-time cube randomization and optional hand-pose overrides for custom MJCF layouts.
+- A short porting guide for custom MJCF assets lives in [`docs/in_hand_cube_orientation.md`](docs/in_hand_cube_orientation.md).
