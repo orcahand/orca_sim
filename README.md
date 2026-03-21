@@ -59,32 +59,7 @@ env = OrcaHandRight()  # latest version of the standard right hand
 extended_env = OrcaHandRightExtended()  # latest version of the extended right hand
 ```
 
-Versions are stored with a flat layout like:
-
-```text
-src/orca_sim/scenes/
-  v1/
-    scene_left.xml
-    scene_right.xml
-    scene_combined.xml
-    scene_left_extended.xml
-    scene_right_extended.xml
-    scene_combined_extended.xml
-  v2/
-    ...
-
-src/orca_sim/models/
-  v1/
-    left.mjcf
-    right.mjcf
-    left_extended.mjcf
-    right_extended.mjcf
-  v2/
-    left.mjcf
-    right.mjcf
-```
-
-You can still pin an older version explicitly when needed:
+`orca_sim` stored different hand versions under versioned `scenes/` and `models/` directories. You can still pin an older version explicitly when needed:
 
 ```python
 from orca_sim import OrcaHandCombinedExtended
@@ -137,4 +112,4 @@ The implementation is intentionally split so it doubles as a porting template:
 - The task scene lives in [`src/orca_sim/scenes/v2/scene_right_cube_orientation.xml`](src/orca_sim/scenes/v2/scene_right_cube_orientation.xml) and composes the existing hand MJCF with a single task cube.
 - The nominal palm-up hand pose and in-palm cube spawn are now authored into the task-specific scene/model files, so opening the XML directly in MuJoCo shows the intended setup.
 - The task logic lives in [`src/orca_sim/task_envs.py`](src/orca_sim/task_envs.py), including reset-time cube randomization and optional hand-pose overrides for custom MJCF layouts.
-- A short porting guide for custom MJCF assets lives in [`docs/in_hand_cube_orientation.md`](docs/in_hand_cube_orientation.md).
+
