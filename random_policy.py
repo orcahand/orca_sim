@@ -16,6 +16,7 @@ try:
         OrcaHandLeft,
         OrcaHandLeftExtended,
         OrcaHandRight,
+        OrcaHandRightCubeOrientation,
         OrcaHandRightExtended,
     )
 except ModuleNotFoundError as exc:
@@ -31,6 +32,7 @@ ENV_BUILDERS = {
     "left": OrcaHandLeft,
     "left_extended": OrcaHandLeftExtended,
     "right": OrcaHandRight,
+    "right_cube_orientation": OrcaHandRightCubeOrientation,
     "right_extended": OrcaHandRightExtended,
     "combined": OrcaHandCombined,
     "combined_extended": OrcaHandCombinedExtended,

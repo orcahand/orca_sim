@@ -1,0 +1,36 @@
+<?xml version="1.0" ?>
+<mujoco model="ORCA hand right cube orientation scene">
+
+  <include file="../../models/v2/assets/scene.xml"/>
+  <include file="../../models/v2/assets/options.xml"/>
+  <include file="../../models/v2/right_cube_orientation.mjcf"/>
+
+  <worldbody>
+    <body name="task_cube" pos="0.11 -0.02 0.28" quat="0 1 0 0">
+      <freejoint name="cube_freejoint"/>
+      <inertial pos="0 0 0" mass="0.08" diaginertia="0.0000173 0.0000173 0.0000173"/>
+      <geom
+        name="task_cube_body"
+        type="box"
+        size="0.018 0.018 0.018"
+        rgba="0.96 0.94 0.90 1"
+        friction="1.2 0.01 0.002"
+      />
+      <geom
+        name="task_cube_red_face"
+        type="box"
+        pos="0 0 0.0192"
+        size="0.017 0.017 0.0012"
+        rgba="0.92 0.10 0.08 1"
+        contype="0"
+        conaffinity="0"
+      />
+      <site name="task_cube_center" type="sphere" pos="0 0 0" size="0.002" rgba="1 1 1 0"/>
+    </body>
+  </worldbody>
+
+  <keyframe>
+    <key name="startup_pose"/>
+  </keyframe>
+
+</mujoco>

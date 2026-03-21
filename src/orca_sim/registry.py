@@ -21,6 +21,10 @@ def register_envs() -> None:
             "orca_sim.envs:OrcaHandCombinedExtended",
             "scene_combined_extended.xml",
         ),
+        "OrcaHandRightCubeOrientation": (
+            "orca_sim.task_envs:OrcaHandRightCubeOrientation",
+            "scene_right_cube_orientation.xml",
+        ),
     }
     for version in list_versions():
         for env_name, (entry_point, scene_file) in specs.items():

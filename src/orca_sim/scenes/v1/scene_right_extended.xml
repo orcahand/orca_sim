@@ -2,7 +2,6 @@
 <mujoco model="ORCA hand right extended scene">
 
   <include file="../../assets/mjcf/scene.xml"/>
-  <include file="../../assets/mjcf/options.xml"/>
   <include file="../../models/v1/right_extended.mjcf"/>
 
 </mujoco>

@@ -11,6 +11,7 @@ from orca_sim.envs import (
     OrcaHandRightExtended,
 )
 from orca_sim.registry import register_envs
+from orca_sim.task_envs import OrcaHandRightCubeOrientation
 
 __all__ = [
     "OrcaHandCombined",
@@ -18,6 +19,7 @@ __all__ = [
     "OrcaHandLeft",
     "OrcaHandLeftExtended",
     "OrcaHandRight",
+    "OrcaHandRightCubeOrientation",
     "OrcaHandRightExtended",
     "latest_version",
     "list_versions",
