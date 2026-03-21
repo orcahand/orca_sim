@@ -9,7 +9,7 @@
     <body name="right_mount" pos="0 0 0.16" quat="0 0.70710678 0.70710678 0">
       <include file="../../models/v2/mjcf/orcahand_right_body.xml"/>
     </body>
-    <body name="task_cube" pos="0.11 -0.02 0.28" quat="0 1 0 0">
+    <body name="task_cube" pos="0.17 -0.015 0.19" quat="0 1 0 0">
       <freejoint name="cube_freejoint"/>
       <inertial pos="0 0 0" mass="0.08" diaginertia="0.0000173 0.0000173 0.0000173"/>
       <geom
