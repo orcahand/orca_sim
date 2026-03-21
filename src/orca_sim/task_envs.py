@@ -14,7 +14,6 @@ from orca_sim.envs import BaseOrcaHandEnv
 class OrcaHandRightCubeOrientation(BaseOrcaHandEnv):
     """Sample in-hand cube reorientation task with a single red target face."""
 
-    ROOT_BODY_NAME_BY_VERSION = {"v1": "right_tower", "v2": "right_root"}
     DEFAULT_INITIAL_RED_FACE = "down"
     DEFAULT_CUBE_POS_XY_JITTER = np.array([0.0, 0.0], dtype=np.float64)
     RED_DOWN_QUAT = np.array([0.0, 1.0, 0.0, 0.0], dtype=np.float64)
@@ -30,9 +29,6 @@ class OrcaHandRightCubeOrientation(BaseOrcaHandEnv):
         cube_joint_name: str = "cube_freejoint",
         cube_body_name: str = "task_cube",
         hand_pose_by_joint: Mapping[str, float] | None = None,
-        hand_root_body_name: str | None = None,
-        hand_root_pos: np.ndarray | None = None,
-        hand_root_quat: np.ndarray | None = None,
         initial_red_face: str = DEFAULT_INITIAL_RED_FACE,
         cube_pos_xy_jitter: float | tuple[float, float] = 0.0,
         max_episode_steps: int = 200,
@@ -45,9 +41,6 @@ class OrcaHandRightCubeOrientation(BaseOrcaHandEnv):
         self._requested_hand_pose_by_joint = (
             None if hand_pose_by_joint is None else dict(hand_pose_by_joint)
         )
-        self._requested_hand_root_body_name = hand_root_body_name
-        self._requested_hand_root_pos = hand_root_pos
-        self._requested_hand_root_quat = hand_root_quat
         self.initial_red_face = self._validate_initial_red_face(initial_red_face)
         self.cube_pos_xy_jitter = self._normalize_xy_jitter(cube_pos_xy_jitter)
         self.max_episode_steps = max_episode_steps
@@ -66,26 +59,6 @@ class OrcaHandRightCubeOrientation(BaseOrcaHandEnv):
         self._cube_qpos_adr = int(self.model.jnt_qposadr[self._cube_joint_id])
         self._cube_qvel_adr = int(self.model.jnt_dofadr[self._cube_joint_id])
         self._cube_body_id = self.model.body(self.cube_body_name).id
-
-        self._hand_root_body_name = self._resolve_hand_root_body_name()
-        self._hand_root_body_id = (
-            None
-            if self._hand_root_body_name is None
-            else self.model.body(self._hand_root_body_name).id
-        )
-        self._hand_root_pos = (
-            None
-            if self._requested_hand_root_pos is None
-            else np.asarray(self._requested_hand_root_pos, dtype=np.float64)
-        )
-        self._hand_root_quat = (
-            None
-            if self._requested_hand_root_quat is None
-            else self._normalize_quat(np.asarray(self._requested_hand_root_quat, dtype=np.float64))
-        )
-        if self._hand_root_pos is not None and self._hand_root_pos.shape != (3,):
-            raise ValueError(f"Expected hand_root_pos shape (3,), got {self._hand_root_pos.shape}")
-        self._apply_hand_base_pose()
 
         self._actuator_qpos_indices = self._resolve_actuator_qpos_indices()
         self._default_cube_pos = self.model.qpos0[
@@ -110,35 +83,6 @@ class OrcaHandRightCubeOrientation(BaseOrcaHandEnv):
             shape=obs.shape,
             dtype=np.float64,
         )
-
-    def _resolve_hand_root_body_name(self) -> str | None:
-        if (
-            self._requested_hand_root_body_name is None
-            and self._requested_hand_root_pos is None
-            and self._requested_hand_root_quat is None
-        ):
-            return None
-
-        if self._requested_hand_root_body_name is not None:
-            return self._requested_hand_root_body_name
-
-        body_name = self.ROOT_BODY_NAME_BY_VERSION.get(self.version)
-        if body_name is None:
-            known_versions = ", ".join(sorted(self.ROOT_BODY_NAME_BY_VERSION))
-            raise ValueError(
-                f"No default hand root body is defined for version '{self.version}'. "
-                f"Known defaults: {known_versions}. Pass hand_root_body_name explicitly "
-                "for custom MJCF layouts."
-            )
-        return body_name
-
-    def _apply_hand_base_pose(self) -> None:
-        if self._hand_root_body_id is None:
-            return
-        if self._hand_root_pos is not None:
-            self.model.body_pos[self._hand_root_body_id] = self._hand_root_pos
-        if self._hand_root_quat is not None:
-            self.model.body_quat[self._hand_root_body_id] = self._hand_root_quat
 
     def _resolve_actuator_qpos_indices(self) -> np.ndarray:
         indices = np.empty(self.model.nu, dtype=np.int32)
@@ -318,7 +262,6 @@ class OrcaHandRightCubeOrientation(BaseOrcaHandEnv):
     ) -> tuple[np.ndarray, dict[str, Any]]:
         gym.Env.reset(self, seed=seed)
         mujoco.mj_resetData(self.model, self.data)
-        self._apply_hand_base_pose()
         self._elapsed_steps = 0
 
         options = {} if options is None else dict(options)
