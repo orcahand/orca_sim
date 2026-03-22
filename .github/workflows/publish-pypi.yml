@@ -1,0 +1,140 @@
+name: Publish to PyPI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - pyproject.toml
+      - .github/workflows/publish-pypi.yml
+  workflow_dispatch:
+
+concurrency:
+  group: publish-pypi
+  cancel-in-progress: false
+
+jobs:
+  detect-release:
+    runs-on: ubuntu-latest
+    outputs:
+      package_name: ${{ steps.release_info.outputs.package_name }}
+      publish: ${{ steps.release_info.outputs.publish }}
+      reason: ${{ steps.release_info.outputs.reason }}
+      version: ${{ steps.release_info.outputs.version }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Decide whether to publish
+        id: release_info
+        env:
+          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import pathlib
+          import re
+          import subprocess
+          import tomllib
+          import urllib.error
+          import urllib.request
+
+          github_output = pathlib.Path(os.environ["GITHUB_OUTPUT"])
+          pyproject = tomllib.loads(pathlib.Path("pyproject.toml").read_text())
+          project = pyproject["project"]
+          raw_name = project["name"]
+          version = project["version"]
+          normalized_name = re.sub(r"[-_.]+", "-", raw_name).lower()
+          previous_version = None
+
+          before = os.environ.get("GITHUB_EVENT_BEFORE", "")
+          if before and before != "0000000000000000000000000000000000000000":
+              try:
+                  previous_pyproject = subprocess.check_output(
+                      ["git", "show", f"{before}:pyproject.toml"],
+                      text=True,
+                  )
+                  previous_version = tomllib.loads(previous_pyproject)["project"]["version"]
+              except Exception:
+                  previous_version = None
+
+          publish = True
+          reasons = []
+
+          if os.environ["GITHUB_EVENT_NAME"] != "workflow_dispatch" and previous_version == version:
+              publish = False
+              reasons.append("Version in pyproject.toml did not change.")
+
+          pypi_url = f"https://pypi.org/pypi/{normalized_name}/json"
+          try:
+              with urllib.request.urlopen(pypi_url) as response:
+                  payload = json.load(response)
+              if version in payload.get("releases", {}):
+                  publish = False
+                  reasons.append("Version is already published on PyPI.")
+          except urllib.error.HTTPError as exc:
+              if exc.code != 404:
+                  raise
+
+          if not reasons:
+              reasons.append("New version detected.")
+
+          with github_output.open("a", encoding="utf-8") as handle:
+              handle.write(f"package_name={normalized_name}\n")
+              handle.write(f"publish={'true' if publish else 'false'}\n")
+              handle.write(f"reason={' '.join(reasons)}\n")
+              handle.write(f"version={version}\n")
+          PY
+
+      - name: Report decision
+        run: |
+          echo "publish=${{ steps.release_info.outputs.publish }}"
+          echo "version=${{ steps.release_info.outputs.version }}"
+          echo "reason=${{ steps.release_info.outputs.reason }}"
+
+  publish:
+    needs: detect-release
+    if: needs.detect-release.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: pypi
+      url: https://pypi.org/project/${{ needs.detect-release.outputs.package_name }}/${{ needs.detect-release.outputs.version }}/
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build tools
+        run: python -m pip install --upgrade build twine
+
+      - name: Build distributions
+        run: python -m build
+
+      - name: Validate distributions
+        run: python -m twine check dist/*
+
+      - name: Publish to PyPI with Trusted Publishing
+        if: ${{ secrets.PYPI_API_TOKEN == '' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Publish to PyPI with API token
+        if: ${{ secrets.PYPI_API_TOKEN != '' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
