@@ -173,13 +173,13 @@ class OrcaHandRightCubeOrientation(BaseOrcaHandEnv):
 
     def _compose_ctrl_from_qpos(self, qpos: np.ndarray | None = None) -> np.ndarray:
         source_qpos = self.data.qpos if qpos is None else np.asarray(qpos, dtype=np.float64)
-        ctrl = np.zeros(self.model.nu, dtype=np.float32)
-        for actuator_id, qpos_idx in enumerate(self._actuator_qpos_indices):
-            ctrl[actuator_id] = float(
+        ctrl = np.zeros(len(self.hand.config.joint_ids), dtype=np.float32)
+        for ctrl_idx, qpos_idx in enumerate(self.hand.config.actuator_qpos_indices):
+            ctrl[ctrl_idx] = float(
                 np.clip(
                     source_qpos[qpos_idx],
-                    self.action_low[actuator_id],
-                    self.action_high[actuator_id],
+                    self.action_low[ctrl_idx],
+                    self.action_high[ctrl_idx],
                 )
             )
         return ctrl
