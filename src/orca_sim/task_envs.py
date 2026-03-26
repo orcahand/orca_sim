@@ -171,12 +171,13 @@ class OrcaHandRightCubeOrientation(BaseOrcaHandEnv):
             return self._default_cube_quat.copy()
         return self._sample_random_nonsolved_quaternion(self.np_random)
 
-    def _compose_ctrl_from_qpos(self) -> np.ndarray:
+    def _compose_ctrl_from_qpos(self, qpos: np.ndarray | None = None) -> np.ndarray:
+        source_qpos = self.data.qpos if qpos is None else np.asarray(qpos, dtype=np.float64)
         ctrl = np.zeros(self.model.nu, dtype=np.float32)
         for actuator_id, qpos_idx in enumerate(self._actuator_qpos_indices):
             ctrl[actuator_id] = float(
                 np.clip(
-                    self.data.qpos[qpos_idx],
+                    source_qpos[qpos_idx],
                     self.action_low[actuator_id],
                     self.action_high[actuator_id],
                 )
@@ -261,7 +262,6 @@ class OrcaHandRightCubeOrientation(BaseOrcaHandEnv):
         options: dict[str, Any] | None = None,
     ) -> tuple[np.ndarray, dict[str, Any]]:
         gym.Env.reset(self, seed=seed)
-        mujoco.mj_resetData(self.model, self.data)
         self._elapsed_steps = 0
 
         options = {} if options is None else dict(options)
@@ -298,9 +298,10 @@ class OrcaHandRightCubeOrientation(BaseOrcaHandEnv):
 
             cube_quat = self._resolve_initial_cube_quat(options)
 
-            self.data.qpos[: self._cube_qpos_adr] = hand_qpos
-            self.data.qpos[self._cube_qpos_adr : self._cube_qpos_adr + 3] = cube_pos
-            self.data.qpos[self._cube_qpos_adr + 3 : self._cube_qpos_adr + 7] = cube_quat
+            qpos = self.model.qpos0.copy()
+            qpos[: self._cube_qpos_adr] = hand_qpos
+            qpos[self._cube_qpos_adr : self._cube_qpos_adr + 3] = cube_pos
+            qpos[self._cube_qpos_adr + 3 : self._cube_qpos_adr + 7] = cube_quat
 
         if full_qvel is not None:
             qvel = np.asarray(full_qvel, dtype=np.float64)
@@ -308,43 +309,29 @@ class OrcaHandRightCubeOrientation(BaseOrcaHandEnv):
                 raise ValueError(
                     f"Expected qvel shape {self.data.qvel.shape}, got {qvel.shape}"
                 )
-            self.data.qvel[:] = qvel
         else:
-            self.data.qvel[:] = 0.0
+            qvel = np.zeros_like(self.data.qvel)
             if "cube_qvel" in options:
                 cube_qvel = np.asarray(options["cube_qvel"], dtype=np.float64)
                 if cube_qvel.shape != (6,):
                     raise ValueError(
                         f"Expected cube_qvel shape (6,), got {cube_qvel.shape}"
                     )
-                self.data.qvel[self._cube_qvel_adr : self._cube_qvel_adr + 6] = cube_qvel
+                qvel[self._cube_qvel_adr : self._cube_qvel_adr + 6] = cube_qvel
 
-        self.data.ctrl[:] = self._compose_ctrl_from_qpos()
-        mujoco.mj_forward(self.model, self.data)
+        ctrl = self._compose_ctrl_from_qpos(qpos)
+        self.hand.reset(qpos=qpos, qvel=qvel, ctrl=ctrl)
 
         settle_steps = int(options.get("settle_steps", 0))
         for _ in range(settle_steps):
-            mujoco.mj_step(self.model, self.data)
-            self.data.ctrl[:] = self._compose_ctrl_from_qpos()
-
-        mujoco.mj_forward(self.model, self.data)
-
-        if self.render_mode == "human":
-            self.render()
+            self.hand.step(nstep=1)
 
         return self._get_obs(), self._get_info()
 
     def step(
         self, action: np.ndarray
     ) -> tuple[np.ndarray, float, bool, bool, dict[str, Any]]:
-        action = np.asarray(action, dtype=np.float32)
-        if action.shape != self.action_space.shape:
-            raise ValueError(
-                f"Expected action shape {self.action_space.shape}, got {action.shape}"
-            )
-
-        self.data.ctrl[:] = np.clip(action, self.action_low, self.action_high)
-        mujoco.mj_step(self.model, self.data, nstep=self.frame_skip)
+        self.hand.step(action)
         self._elapsed_steps += 1
 
         obs = self._get_obs()
@@ -352,9 +339,6 @@ class OrcaHandRightCubeOrientation(BaseOrcaHandEnv):
         terminated = self._get_terminated()
         truncated = self._get_truncated()
         info = self._get_info()
-
-        if self.render_mode == "human":
-            self.render()
 
         return obs, reward, terminated, truncated, info
 
