@@ -1,21 +1,12 @@
-from __future__ import annotations
-
 """Integration tests for the runtime hand API stack.
 
-These checks are intentionally broader than unit tests. They validate that the
-package remains coherent end-to-end across:
-
+These tests validate concordance between:
 - MuJoCo scene assets
 - SimOrcaHandConfig metadata derivation
 - SimOrcaHand's shared BaseHand contract
 - Gym env wrappers built on top of SimOrcaHand
 - Task env wrappers built on top of SimOrcaHand
-
-The goal is to protect the public runtime architecture, not only the original
-port from the vertically integrated implementation.
 """
-
-from unittest.mock import patch
 
 import mujoco
 import numpy as np
@@ -35,23 +26,9 @@ from orca_sim.joint_mapping import (
 from orca_sim.versions import resolve_scene_path
 
 
-def _joint_names_from_model(model: mujoco.MjModel) -> list[str]:
-    return [
-        model.joint(int(model.actuator_trnid[actuator_id, 0])).name
-        for actuator_id in range(model.nu)
-    ]
-
-
 def _qpos_indices_from_model(model: mujoco.MjModel) -> list[int]:
     return [
         int(model.jnt_qposadr[int(model.actuator_trnid[actuator_id, 0])])
-        for actuator_id in range(model.nu)
-    ]
-
-
-def _qvel_indices_from_model(model: mujoco.MjModel) -> list[int]:
-    return [
-        int(model.jnt_dofadr[int(model.actuator_trnid[actuator_id, 0])])
         for actuator_id in range(model.nu)
     ]
 
@@ -89,11 +66,14 @@ def _raw_reset(
     else:
         ctrl = np.asarray(ctrl, dtype=np.float32)
     ctrl = np.clip(ctrl, np.asarray(config.action_low), np.asarray(config.action_high))
+    
+    # Set actuators to control values
     for actuator_id, value in zip(config.actuator_ids, ctrl, strict=True):
         data.ctrl[actuator_id] = float(value)
 
     mujoco.mj_forward(model, data)
     obs = np.concatenate([data.qpos.copy(), data.qvel.copy()])
+
     return model, data, obs
 
 
@@ -111,15 +91,28 @@ def _raw_reset(
 def test_sim_hand_config_matches_scene_metadata(
     scene_file: str, version: str, expected_type: str | None
 ) -> None:
-    config = SimOrcaHandConfig.from_config_path(scene_file=scene_file, version=version)
+    """Tests mujoco models follows specs from the higher-level hand config. In particular, it ensures:
+    - Correct hand type is inferred from joint names.
+    - Correct joint name to scene joint name mapping.
+    - Correct derivation of: 
+        - joint ids, 
+        - scene joint names, 
+        - actuator ids, actuator qpos indices, actuator qvel indices, 
+        - action bounds [low, high]
+        - neutral position
+    """
+
+    """Mujoco model"""
     scene_path = resolve_scene_path(scene_file, version=version)
     model = mujoco.MjModel.from_xml_path(str(scene_path))
+
+    """SimOrcaHandConfig"""
+    config = SimOrcaHandConfig.from_config_path(scene_file=scene_file, version=version)
 
     resolved_type, expected_mapping = default_joint_name_to_scene_joint_name(
         scene_file=scene_file,
         version=version,
     )
-    expected_joint_ids = list(expected_mapping)
     expected_scene_joint_names = list(expected_mapping.values())
 
     scene_joint_to_actuator_id = {}
@@ -137,7 +130,6 @@ def test_sim_hand_config_matches_scene_metadata(
     assert config.version == version
     assert resolved_type == expected_type
     assert config.type == expected_type
-    assert config.joint_ids == expected_joint_ids
     assert list(config.scene_joint_names) == expected_scene_joint_names
     assert list(config.actuator_ids) == [
         scene_joint_to_actuator_id[joint_name] for joint_name in expected_scene_joint_names
@@ -148,11 +140,11 @@ def test_sim_hand_config_matches_scene_metadata(
     assert list(config.actuator_qvel_indices) == [
         scene_joint_to_qvel_idx[joint_name] for joint_name in expected_scene_joint_names
     ]
-    np.testing.assert_allclose(
+    assert np.allclose(
         np.asarray(config.action_low),
         [model.actuator_ctrlrange[actuator_id, 0] for actuator_id in config.actuator_ids],
     )
-    np.testing.assert_allclose(
+    assert np.allclose(
         np.asarray(config.action_high),
         [model.actuator_ctrlrange[actuator_id, 1] for actuator_id in config.actuator_ids],
     )
@@ -162,18 +154,30 @@ def test_sim_hand_config_matches_scene_metadata(
         assert config.neutral_position[joint_name] == pytest.approx(model.qpos0[qpos_idx])
 
 
-def test_sim_hand_uses_orca_core_canonical_order_for_single_hand_configs() -> None:
-    canonical_joint_ids = list(canonical_single_hand_joint_ids())
+@pytest.mark.parametrize(
+    ("scene_file", "version", "hand_type"),
+    [
+        ("scene_right.xml", "v1", "right"),
+        ("scene_right.xml", "v2", "right"),
+        ("scene_left.xml", "v1", "left"),
+        ("scene_left.xml", "v2", "left"),
+    ],
+)
+def test_sim_hand_uses_orca_core_canonical_order_single_hand(
+    scene_file: str, version: str, hand_type: str
+) -> None:
+    expected = list(canonical_single_hand_joint_ids(version=version, hand_type=hand_type))
+    config = SimOrcaHandConfig.from_config_path(scene_file=scene_file, version=version)
+    assert config.joint_ids == expected
 
-    right_config = SimOrcaHandConfig.from_config_path(scene_file="scene_right.xml", version="v1")
-    left_config = SimOrcaHandConfig.from_config_path(scene_file="scene_left.xml", version="v2")
-    combined_config = SimOrcaHandConfig.from_config_path(scene_file="scene_combined.xml", version="v2")
 
-    assert right_config.joint_ids == canonical_joint_ids
-    assert left_config.joint_ids == canonical_joint_ids
-    assert combined_config.joint_ids == [
-        *[f"left_{joint}" for joint in canonical_joint_ids],
-        *[f"right_{joint}" for joint in canonical_joint_ids],
+@pytest.mark.parametrize("version", ["v1", "v2"])
+def test_sim_hand_uses_orca_core_canonical_order_combined(version: str) -> None:
+    canonical = list(canonical_single_hand_joint_ids(version=version, hand_type="right"))
+    config = SimOrcaHandConfig.from_config_path(scene_file="scene_combined.xml", version=version)
+    assert config.joint_ids == [
+        *[f"left_{joint}" for joint in canonical],
+        *[f"right_{joint}" for joint in canonical],
     ]
 
 
@@ -280,34 +284,35 @@ def test_shared_base_hand_helpers_work_for_sim_hand(version: str) -> None:
 
 
 @pytest.mark.parametrize("version", ["v1", "v2"])
-def test_base_env_delegates_reset_and_step_to_sim_hand(version: str) -> None:
+def test_base_env_delegates_reset_and_step_to_sim_hand(mocker, version: str) -> None:
     env = OrcaHandRight(version=version)
     try:
-        with patch.object(env.hand, "reset", wraps=env.hand.reset) as hand_reset:
-            env.reset()
-            hand_reset.assert_called_once()
+        hand_reset = mocker.patch.object(env.hand, "reset", wraps=env.hand.reset)
+        env.reset()
+        hand_reset.assert_called_once()
+        mocker.stop(hand_reset)
 
-        with patch.object(env.hand, "step", wraps=env.hand.step) as hand_step:
-            env.step(env.action_space.sample())
-            hand_step.assert_called_once()
+        hand_step = mocker.patch.object(env.hand, "step", wraps=env.hand.step)
+        env.step(env.action_space.sample())
+        hand_step.assert_called_once()
     finally:
         env.close()
 
 
 @pytest.mark.parametrize("version", ["v1", "v2"])
-def test_task_env_delegates_reset_and_step_to_sim_hand(version: str) -> None:
+def test_task_env_delegates_reset_and_step_to_sim_hand(mocker, version: str) -> None:
     env = OrcaHandRightCubeOrientation(version=version)
     try:
-        with (
-            patch.object(env.hand, "reset", wraps=env.hand.reset) as hand_reset,
-            patch.object(env.hand, "step", wraps=env.hand.step) as hand_step,
-        ):
-            env.reset(options={"settle_steps": 2})
-            hand_reset.assert_called_once()
-            assert hand_step.call_count == 2
+        hand_reset = mocker.patch.object(env.hand, "reset", wraps=env.hand.reset)
+        hand_step = mocker.patch.object(env.hand, "step", wraps=env.hand.step)
+        env.reset(options={"settle_steps": 2})
+        hand_reset.assert_called_once()
+        assert hand_step.call_count == 2
+        mocker.stop(hand_reset)
+        mocker.stop(hand_step)
 
-        with patch.object(env.hand, "step", wraps=env.hand.step) as hand_step:
-            env.step(env.action_space.sample())
-            hand_step.assert_called_once()
+        hand_step = mocker.patch.object(env.hand, "step", wraps=env.hand.step)
+        env.step(env.action_space.sample())
+        hand_step.assert_called_once()
     finally:
         env.close()
