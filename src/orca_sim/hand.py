@@ -37,7 +37,13 @@ class SimOrcaHandConfig(BaseHandConfig):
         version: str | None = None,
         joint_name_to_scene_joint_name: Mapping[str, str] | None = None,
         hand_type: str | None = None,
+        model_version: str | None = None,
+        model_name: str | None = None,
     ) -> "SimOrcaHandConfig":
+        del model_name
+        if version is None:
+            version = model_version
+
         if config_path is None:
             scene_path = resolve_scene_path(scene_file, version=version)
         else:
