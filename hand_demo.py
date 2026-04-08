@@ -1,25 +1,9 @@
 import argparse
-import sys
-import time
-from pathlib import Path
+import logging
 
-import numpy as np
+from orca_core.demo_presets import DEMO_POSE_FRACTIONS, DEMO_SEQUENCES
 
-
-REPO_ROOT = Path(__file__).resolve().parent
-SRC_DIR = REPO_ROOT / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
-
-try:
-    from orca_sim import SimOrcaHand
-except ModuleNotFoundError as exc:
-    if exc.name in {"gymnasium", "mujoco", "numpy", "orca_core"}:
-        raise SystemExit(
-            "Missing runtime dependency "
-            f"'{exc.name}'. Activate your environment and run `uv pip install -e .`."
-        ) from exc
-    raise
+from orca_sim import SimOrcaHand
 
 
 SCENE_CHOICES = (
@@ -33,13 +17,62 @@ SCENE_CHOICES = (
 )
 
 
+def _expand_fractions_bimanual(fractions: dict[str, float]) -> dict[str, float]:
+    """Prefix bare canonical joint fractions with both ``left_`` and ``right_``."""
+    return {
+        f"{side}_{joint}": value
+        for side in ("left", "right")
+        for joint, value in fractions.items()
+    }
+
+
+def run_demo(
+    hand: SimOrcaHand,
+    demo_name: str = "main",
+    cycles: int = 1,
+    num_steps: int = 25,
+    step_size: float = 0.05,
+    return_to_neutral: bool = True,
+) -> None:
+    """Run a named demo sequence on any scene, including combined (bimanual) ones.
+
+    For single-hand scenes this delegates directly to ``hand.run_demo``.  For
+    combined scenes the bare canonical joint names in the demo presets are
+    automatically expanded to ``left_*`` / ``right_*`` so both hands move in
+    sync.
+    """
+    is_bimanual = hand.config.type is None  # bimanual hand has no "left" or "right"type
+    if not is_bimanual:
+        return hand.run_demo(
+            demo_name=demo_name,
+            cycles=cycles,
+            num_steps=num_steps,
+            step_size=step_size,
+            return_to_neutral=return_to_neutral,
+        )
+
+    if demo_name not in DEMO_POSE_FRACTIONS:
+        available = ", ".join(sorted(DEMO_SEQUENCES))
+        raise ValueError(f"Unknown demo '{demo_name}'. Available demos: {available}.")
+
+    for name, fractions in DEMO_POSE_FRACTIONS[demo_name].items():
+        hand.register_position(
+            name,
+            hand.pose_from_fractions(_expand_fractions_bimanual(fractions)),
+        )
+
+    hand.play_named_positions(
+        DEMO_SEQUENCES[demo_name],
+        cycles=cycles,
+        num_steps=num_steps,
+        step_size=step_size,
+        return_to_neutral=return_to_neutral,
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description=(
-            "Demonstrate the shared orca_core hand tooling on top of the MuJoCo sim. "
-            "The script samples random actions and sends the hand back to neutral "
-            "every N steps while rendering."
-        )
+        description="Play back orca_core demo presets on SimOrcaHand."
     )
     parser.add_argument(
         "--scene-file",
@@ -50,7 +83,7 @@ def main() -> None:
     parser.add_argument(
         "--version",
         default=None,
-        help="Embodiment version to load, for example 'v1' or 'v2'.",
+        help="Embodiment version to load, e.g. 'v1' or 'v2'.",
     )
     parser.add_argument(
         "--render-mode",
@@ -59,12 +92,29 @@ def main() -> None:
         help="Use 'human' for the MuJoCo viewer or 'rgb_array' for offscreen rendering.",
     )
     parser.add_argument(
+        "--demo-name",
+        choices=list(DEMO_SEQUENCES),
+        default="main",
+        help="Which demo sequence to play.",
+    )
+    parser.add_argument(
         "--cycles",
         type=int,
         default=10,
-        help="Demo cycles to run.",
+        help="Number of times to repeat the demo sequence.",
     )
-    
+    parser.add_argument(
+        "--num-steps",
+        type=int,
+        default=25,
+        help="Interpolation steps between poses. More steps = smoother motion.",
+    )
+    parser.add_argument(
+        "--step-size",
+        type=float,
+        default=0.05,
+        help="Sleep in seconds between interpolation steps. Increase to slow down playback.",
+    )
     args = parser.parse_args()
 
     hand = SimOrcaHand(
@@ -72,19 +122,19 @@ def main() -> None:
         version=args.version,
         render_mode=args.render_mode,
     )
-
-    import logging
-    logging.info(f"scene={args.scene_file}")
-    logging.info(f"version={hand.version}")
-    logging.info(f"num_joints={len(hand.config.joint_ids)}")
-    logging.info(f"joint_ids={list(hand.config.joint_ids)}")
+    logging.info(f"scene={args.scene_file} version={hand.version} num_joints={len(hand.config.joint_ids)}")
 
     try:
-        hand.run_demo(demo_name="main", cycles=args.cycles, step_size=0.01)
-        
-
+        hand.reset()
+        run_demo(
+            hand,
+            demo_name=args.demo_name,
+            cycles=args.cycles,
+            num_steps=args.num_steps,
+            step_size=args.step_size,
+        )
     except KeyboardInterrupt:
-        logging.info("WARNING! Demo stopped by user")
+        logging.info("Demo stopped by user.")
     finally:
         hand.close()
 
