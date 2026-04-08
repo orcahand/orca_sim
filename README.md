@@ -67,7 +67,8 @@ from orca_sim import OrcaHandCombinedExtended
 env = OrcaHandCombinedExtended(version="v1")  # loads the v1 hand
 ```
 
-See our [`random_policy.py`](random_policy.py) example to see how to instantiate and interface an ORCA hand.
+See our [`random_policy.py`](random_policy.py) example to see how to instantiate and interface an ORCA hand through the Gymnasium API.
+If you want a lower-level demo built directly on the shared `orca_core` hand helpers, see [`hand_demo.py`](hand_demo.py).
 
 ## Sample task: in-hand cube orientation
 
@@ -112,4 +113,3 @@ The implementation is intentionally split so it doubles as a porting template:
 - The task scene lives in [`src/orca_sim/scenes/v2/scene_right_cube_orientation.xml`](src/orca_sim/scenes/v2/scene_right_cube_orientation.xml) and composes the existing hand MJCF with a single task cube.
 - The nominal palm-up hand pose and in-palm cube spawn are now authored into the task-specific scene/model files, so opening the XML directly in MuJoCo shows the intended setup.
 - The task logic lives in [`src/orca_sim/task_envs.py`](src/orca_sim/task_envs.py), including reset-time cube randomization and optional hand-pose overrides for custom MJCF layouts.
-

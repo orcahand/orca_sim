@@ -15,7 +15,7 @@ dependencies = [
   "gymnasium>=0.29",
   "mujoco>=3.1",
   "numpy>=1.26",
-  "orca_core @ git+https://github.com/orcahand/orca_core.git@9d03675",
+  "orca_core @ git+https://github.com/orcahand/orca_core.git@54523bf2229f4995028f143ed29529cc98c643d5",
 ]
 
 [project.optional-dependencies]
