@@ -23,6 +23,15 @@ dev = [
   "pytest>=8",
   "pytest-mock>=3.14",
 ]
+maniskill = [
+  "mani_skill @ git+https://github.com/fracapuano/ManiSkill.git@3dc8c0c52c71c2f41932eb9f0371ca340cf1b038",
+  "torch",
+  "sapien",
+  "transforms3d",
+  "imageio",
+  "imageio-ffmpeg",
+  "orca_arm @ git+https://github.com/fracapuano/orca_arm.git@4274dd6",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
