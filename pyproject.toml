@@ -30,7 +30,7 @@ maniskill = [
   "transforms3d",
   "imageio",
   "imageio-ffmpeg",
-  "orca_arm @ git+https://github.com/fracapuano/orca_arm.git@4274dd6",
+  "orca_arm @ git+https://github.com/fracapuano/orca_arm.git@6ef9de8",
 ]
 
 [tool.pytest.ini_options]
@@ -56,5 +56,9 @@ orca_sim = [
   "assets/mjcf/right/collision/*.stl",
   "models/mjcf/*.mjcf",
   "models/*/*.mjcf",
+  "models/*/assets/*.xml",
+  "models/*/assets/*/*.stl",
+  "models/*/mjcf/*.xml",
+  "models/*/mjcf/*.mjcf",
   "models/*/assets/mjcf/*/*.stl",
 ]
