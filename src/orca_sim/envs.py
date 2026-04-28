@@ -6,9 +6,10 @@ from gymnasium import spaces
 
 from orca_sim.hand import SimOrcaHand
 
+RENDER_FPS = 30
 
 class BaseOrcaHandEnv(gym.Env[np.ndarray, np.ndarray]):
-    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 30}
+    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": RENDER_FPS}
 
     def __init__(
         self,
