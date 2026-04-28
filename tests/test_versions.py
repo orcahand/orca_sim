@@ -1,4 +1,8 @@
+import os
 from pathlib import Path
+import shutil
+import subprocess
+import sys
 
 import mujoco
 import pytest
@@ -64,3 +68,86 @@ def test_resolve_version_rejects_unknown_versions() -> None:
 )
 def test_scene_paths_load_directly(scene_path: str) -> None:
     mujoco.MjModel.from_xml_path(str(Path(scene_path).resolve()))
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(
+    not os.environ.get("CI"),
+    reason="Packaging smoke test is slow; run it in CI or locally with CI=1.",
+)
+def test_built_wheel_installs_and_resets_right_hand(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    project_dir = tmp_path / "project"
+    wheel_dir = tmp_path / "wheelhouse"
+    shutil.copytree(
+        root,
+        project_dir,
+        ignore=shutil.ignore_patterns(
+            ".git",
+            ".pytest_cache",
+            "__pycache__",
+            "*.pyc",
+            "build",
+            "dist",
+            "*.egg-info",
+        ),
+    )
+    wheel_dir.mkdir()
+
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "wheel",
+            ".",
+            "--no-deps",
+            "--no-build-isolation",
+            "--wheel-dir",
+            str(wheel_dir),
+        ],
+        cwd=project_dir,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    wheel_path = next(wheel_dir.glob("orca_sim-*.whl"))
+    venv_dir = tmp_path / "venv"
+    subprocess.run(
+        [sys.executable, "-m", "venv", "--system-site-packages", str(venv_dir)],
+        cwd=project_dir,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    python_in_venv = venv_dir / "bin" / "python"
+    subprocess.run(
+        [str(python_in_venv), "-m", "pip", "install", "--no-deps", "--force-reinstall", str(wheel_path)],
+        cwd=project_dir,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    smoke_test = subprocess.run(
+        [
+            str(python_in_venv),
+            "-c",
+            (
+                "from orca_sim import OrcaHandRight; "
+                "env = OrcaHandRight(render_mode='rgb_array'); "
+                "obs, info = env.reset(); "
+                "print(obs.shape, type(info).__name__); "
+                "env.close()"
+            ),
+        ],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "(34,)" in smoke_test.stdout
+    assert "dict" in smoke_test.stdout
