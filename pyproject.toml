@@ -31,6 +31,7 @@ arm = [
   "imageio",
   "imageio-ffmpeg",
   "orca_arm",
+  "pin"
 ]
 
 lerobot = [
