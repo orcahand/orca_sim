@@ -44,6 +44,22 @@
 		<mesh name="left_I-PP_Skin" file="../assets/left/I-PP_Skin.stl" />
 		<mesh name="left_M-IP_IP" file="../assets/left/M-IP_IP.stl" />
 		<mesh name="left_M-FingerTipAssembly_M-DP-Skin" file="../assets/left/M-FingerTipAssembly_M-DP-Skin.stl" />
+		<mesh name="left_ForeArmStructure-Model_coll" file="../assets/left_collision/ForeArmStructure-Model.stl" />
+		<mesh name="left_I-AP-L_coll" file="../assets/left_collision/I-AP-L.stl" />
+		<mesh name="left_I-IP_IP_coll" file="../assets/left_collision/I-IP_IP.stl" />
+		<mesh name="left_I-PP_PP_coll" file="../assets/left_collision/I-PP_PP.stl" />
+		<mesh name="left_L-Carpals_coll" file="../assets/left_collision/L-Carpals.stl" />
+		<mesh name="left_L-T-AP_coll" file="../assets/left_collision/L-T-AP.stl" />
+		<mesh name="left_M-AP_coll" file="../assets/left_collision/M-AP.stl" />
+		<mesh name="left_M-IP_IP_coll" file="../assets/left_collision/M-IP_IP.stl" />
+		<mesh name="left_M-PP_PP_coll" file="../assets/left_collision/M-PP_PP.stl" />
+		<mesh name="left_P-AP_coll" file="../assets/left_collision/P-AP.stl" />
+		<mesh name="left_P-IP_IP_coll" file="../assets/left_collision/P-IP_IP.stl" />
+		<mesh name="left_P-PP_PP_coll" file="../assets/left_collision/P-PP_PP.stl" />
+		<mesh name="left_T-DP_T-DP_coll" file="../assets/left_collision/T-DP_T-DP.stl" />
+		<mesh name="left_T-PP_PP_coll" file="../assets/left_collision/T-PP_PP.stl" />
+		<mesh name="left_T-TP-L_coll" file="../assets/left_collision/T-TP-L.stl" />
+		<mesh name="left_TopTower-Model_coll" file="../assets/left_collision/TopTower-Model.stl" />
 	</asset>
 	<actuator>
 		<position name="left_wrist_actuator" joint="left_wrist" ctrlrange="-1.1344640137963142 0.6108652381980153" />
