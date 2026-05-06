@@ -44,85 +44,8 @@ ENV_TO_SCENE = {
     "combined_extended": "scene_combined_extended.xml",
 }
 
-def run_single(args: argparse.Namespace) -> None:
-    print("Running single")
-    env_cls = SINGLE_ENV_BUILDERS[args.env]
-    env = env_cls(render_mode=args.render_mode, version=args.version)
-
-    print("resetting")
-    obs, info = env.reset()
-    print("finished resetting")
-    print(f"mode=single env={args.env} version={env.version}")
-    print(f"obs_shape={obs.shape} action_shape={env.action_space.shape}")
-    print(f"qpos_device={env.mjx_data.qpos.devices()}")
-
-    step = 0
-    try:
-        while True:
-            if args.steps and step >= args.steps:
-                break
-            action = env.action_space.sample()
-            obs, reward, terminated, truncated, info = env.step(action)
-            if args.render_mode == "rgb_array":
-                frame = env.render()
-                print(
-                    f"step={step} frame_shape={None if frame is None else frame.shape} "
-                    f"reward={reward}"
-                )
-            else:
-                print(f"step={step} reward={reward}")
-                time.sleep(1.0 / env.metadata["render_fps"])
-            if terminated or truncated:
-                obs, info = env.reset()
-            step += 1
-    except KeyboardInterrupt:
-        print("stopped by user")
-    finally:
-        env.close()
-
-
-def run_vector(args: argparse.Namespace) -> None:
-    scene = ENV_TO_SCENE[args.env]
-    env = OrcaHandMjxVectorEnv(
-        scene,
-        num_envs=args.num_envs,
-        version=args.version,
-        render_mode=args.render_mode,
-        render_index=args.render_index,
-    )
-
-    obs, info = env.reset()
-    print(f"mode=vector env={args.env} version={env.version} num_envs={env.num_envs}")
-    print(f"obs_shape={obs.shape} action_shape={env.action_space.shape}")
-    print(f"qpos_device={env.mjx_data.qpos.devices()}")
-
-    step = 0
-    try:
-        while True:
-            if args.steps and step >= args.steps:
-                break
-            actions = env.action_space.sample()
-            t0 = time.perf_counter()
-            obs, rewards, terminateds, truncateds, infos = env.step(actions)
-            dt = time.perf_counter() - t0
-            if args.render_mode == "rgb_array":
-                frame = env.render()
-                print(
-                    f"step={step} frame_shape={None if frame is None else frame.shape} "
-                    f"step_dt={dt*1000:.2f}ms"
-                )
-            else:
-                print(f"step={step} step_dt={dt*1000:.2f}ms")
-                time.sleep(max(0.0, 1.0 / env.metadata["render_fps"] - dt))
-            step += 1
-    except KeyboardInterrupt:
-        print("stopped by user")
-    finally:
-        env.close()
-
 
 def main() -> None:
-    print("Main loop")
     parser = argparse.ArgumentParser(
         description="Run a random policy in an MJX-backed ORCA environment."
     )
@@ -158,16 +81,71 @@ def main() -> None:
         "--steps",
         type=int,
         default=0,
-        help="Number of steps. 0 = run until Ctrl+C.",
+        help="Number of random-action steps. 0 = run until Ctrl+C.",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Optional seed for the action-space RNG.",
     )
     args = parser.parse_args()
 
-    print("Args parsed")
-
     if args.num_envs == 1:
-        run_single(args)
+        env = SINGLE_ENV_BUILDERS[args.env](
+            render_mode=args.render_mode, version=args.version
+        )
     else:
-        run_vector(args)
+        env = OrcaHandMjxVectorEnv(
+            ENV_TO_SCENE[args.env],
+            num_envs=args.num_envs,
+            version=args.version,
+            render_mode=args.render_mode,
+            render_index=args.render_index,
+        )
+
+    if args.seed is not None:
+        env.action_space.seed(args.seed)
+
+    obs, info = env.reset()
+    print(f"env={args.env} version={env.version} num_envs={args.num_envs}")
+    print(f"obs_shape={obs.shape}")
+    print(f"action_shape={env.action_space.shape}")
+    print(f"info={info}")
+
+    step = 0
+    try:
+        while True:
+            if args.steps and step >= args.steps:
+                break
+
+            action = env.action_space.sample()
+            t0 = time.perf_counter()
+            obs, reward, terminated, truncated, info = env.step(action)
+            dt = time.perf_counter() - t0
+
+            if args.render_mode == "rgb_array":
+                frame = env.render()
+                print(
+                    f"step={step} frame_shape={None if frame is None else frame.shape} "
+                    f"step_dt={dt*1000:.2f}ms reward={reward}"
+                )
+            else:
+                print(
+                    f"step={step} step_dt={dt*1000:.2f}ms "
+                    f"reward={reward} terminated={terminated} truncated={truncated}"
+                )
+                time.sleep(max(0.0, 1.0 / env.metadata["render_fps"] - dt))
+
+            if args.num_envs == 1 and (terminated or truncated):
+                obs, info = env.reset()
+                print(f"reset step={step} info={info}")
+
+            step += 1
+    except KeyboardInterrupt:
+        print("stopped by user")
+    finally:
+        env.close()
 
 
 if __name__ == "__main__":

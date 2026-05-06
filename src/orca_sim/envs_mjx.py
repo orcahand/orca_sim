@@ -1,4 +1,6 @@
+import os
 import sys
+from pathlib import Path
 from typing import Any
 
 import gymnasium as gym
@@ -10,6 +12,33 @@ from gymnasium import spaces
 from mujoco import mjx
 
 from orca_sim.versions import resolve_scene_path
+
+
+def _enable_jax_compilation_cache() -> None:
+    """Point JAX at a persistent on-disk compile cache.
+
+    First MJX compile of an orca scene takes ~60-120s. With a populated cache,
+    subsequent runs of the same model+JAX+CUDA combination skip the compile
+    almost entirely. Override / disable via env vars:
+      ORCA_SIM_JAX_CACHE=0          # skip wiring the cache
+      ORCA_SIM_JAX_CACHE_DIR=/path  # custom location (default: ~/.cache/orca_sim/jax)
+    Already-set JAX_COMPILATION_CACHE_DIR is honored and never overwritten.
+    """
+    if os.environ.get("ORCA_SIM_JAX_CACHE", "1") == "0":
+        return
+    if os.environ.get("JAX_COMPILATION_CACHE_DIR"):
+        return  # user already configured one; don't override.
+    if jax.config.jax_compilation_cache_dir:
+        return  # already set elsewhere in this process.
+
+    cache_dir = os.environ.get("ORCA_SIM_JAX_CACHE_DIR")
+    if cache_dir is None:
+        cache_dir = str(Path.home() / ".cache" / "orca_sim" / "jax")
+    Path(cache_dir).mkdir(parents=True, exist_ok=True)
+    jax.config.update("jax_compilation_cache_dir", cache_dir)
+
+
+_enable_jax_compilation_cache()
 
 
 def _prepare_mj_model_for_mjx(mj_model: mujoco.MjModel) -> mujoco.MjModel:
@@ -125,10 +154,8 @@ class BaseOrcaHandMjxEnv(gym.Env[np.ndarray, np.ndarray]):
         seed: int | None = None,
         options: dict[str, Any] | None = None,
     ) -> tuple[np.ndarray, dict[str, Any]]:
-        print("Resetting")
         super().reset(seed=seed)
         self.mjx_data = mjx.make_data(self.mjx_model)
-        print("made data")
 
         if options and "qpos" in options:
             qpos = np.asarray(options["qpos"], dtype=np.float64)
@@ -137,7 +164,6 @@ class BaseOrcaHandMjxEnv(gym.Env[np.ndarray, np.ndarray]):
                     f"Expected qpos shape {self.mjx_data.qpos.shape}, got {qpos.shape}"
                 )
             self.mjx_data = self.mjx_data.replace(qpos=jnp.asarray(qpos))
-        print("made q pos")
 
         if options and "qvel" in options:
             qvel = np.asarray(options["qvel"], dtype=np.float64)
@@ -146,15 +172,12 @@ class BaseOrcaHandMjxEnv(gym.Env[np.ndarray, np.ndarray]):
                     f"Expected qvel shape {self.mjx_data.qvel.shape}, got {qvel.shape}"
                 )
             self.mjx_data = self.mjx_data.replace(qvel=jnp.asarray(qvel))
-        print("Forward")
-        self.mjx_data = mjx.forward(self.mjx_model, self.mjx_data)
-        print("Forward done")
 
+        self.mjx_data = mjx.forward(self.mjx_model, self.mjx_data)
 
         self._sync_render_data()
         if self.render_mode == "human":
             self.render()
-        print("finished resetting")
 
         return self._get_obs(), self._get_info()
 

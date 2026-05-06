@@ -69,6 +69,36 @@ env = OrcaHandCombinedExtended(version="v1")  # loads the v1 hand
 
 See our [`random_policy.py`](random_policy.py) example to see how to instantiate and interface an ORCA hand.
 
+### GPU-vectorized envs (MJX, experimental)
+
+`orca_sim` ships an experimental [MJX](https://mujoco.readthedocs.io/en/stable/mjx.html)-backed
+variant of every hand env (`OrcaHandLeftMjx`, `OrcaHandRightMjx`, …) plus a batched
+`OrcaHandMjxVectorEnv` for running hundreds of hands in parallel on the GPU. Try it
+with [`random_policy_mjx.py`](random_policy_mjx.py):
+
+```bash
+python random_policy_mjx.py --env left  --num-envs 1   --render-mode human
+python random_policy_mjx.py --env left  --num-envs 256 --render-mode human
+```
+
+> [!NOTE]
+> **First run is slow.** MJX has to JIT-compile the entire hand model (collisions,
+> contacts, dynamics) into a single XLA graph. Expect **~5-10 min of "frozen" startup**
+> on the first run for a given hand/model — the viewer will not appear until the
+> compile finishes, and `nvidia-smi` will show the GPU near-100% memory used (JAX
+> preallocates VRAM by default — this is not a leak).
+>
+> A persistent on-disk compile cache is enabled automatically at
+> `~/.cache/orca_sim/jax`. **Subsequent runs reuse it and start in seconds.**
+> Override / disable with:
+>
+> ```bash
+> ORCA_SIM_JAX_CACHE_DIR=/some/path python random_policy_mjx.py ...   # custom dir
+> ORCA_SIM_JAX_CACHE=0 python random_policy_mjx.py ...                 # disable
+> ```
+>
+> The cache is invalidated automatically when JAX, CUDA, or the model XML changes.
+
 ## Sample task: in-hand cube orientation
 
 `orca_sim` now also ships a task-level example that augments the right hand with a free-floating cube whose one target face is colored red:
