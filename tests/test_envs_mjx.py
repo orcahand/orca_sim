@@ -13,57 +13,55 @@ def jax_module():
     return jax
 
 
-def test_single_env_smoke(jax_module):
+def test_named_env_default_smoke(jax_module):
     from orca_sim.envs_mjx import OrcaHandLeftMjx
 
     env = OrcaHandLeftMjx()
     obs, info = env.reset()
-    assert obs.shape == env.observation_space.shape
+    assert obs.shape == (1, env.single_observation_space.shape[0])
+    assert isinstance(obs, jax_module.Array)
     assert isinstance(info, dict)
 
-    action = env.action_space.sample()
-    obs2, reward, terminated, truncated, info2 = env.step(action)
+    actions = env.action_space.sample()
+    assert actions.shape == (1, env.single_action_space.shape[0])
+
+    obs2, reward, terminated, truncated, info2 = env.step(actions)
     assert obs2.shape == obs.shape
-    assert isinstance(reward, float)
-    assert isinstance(terminated, bool)
-    assert isinstance(truncated, bool)
+    assert reward.shape == (1,)
+    assert terminated.shape == (1,)
+    assert truncated.shape == (1,)
+    assert isinstance(obs2, jax_module.Array)
+    assert isinstance(reward, jax_module.Array)
+    assert isinstance(terminated, jax_module.Array)
+    assert isinstance(truncated, jax_module.Array)
     env.close()
 
 
-def test_single_env_invalid_action_shape():
+def test_named_env_batched_smoke(jax_module):
     from orca_sim.envs_mjx import OrcaHandLeftMjx
 
-    env = OrcaHandLeftMjx()
-    env.reset()
-    bad = np.zeros(env.action_space.shape[0] + 1, dtype=np.float32)
-    with pytest.raises(ValueError):
-        env.step(bad)
-    env.close()
-
-
-def test_vector_env_smoke(jax_module):
-    from orca_sim.envs_mjx import OrcaHandMjxVectorEnv
-
-    num_envs = 4
-    env = OrcaHandMjxVectorEnv("scene_left.xml", num_envs=num_envs)
+    num_envs = 64
+    env = OrcaHandLeftMjx(num_envs=num_envs)
     obs, info = env.reset()
     assert obs.shape == (num_envs, env.single_observation_space.shape[0])
+    assert isinstance(obs, jax_module.Array)
 
     actions = env.action_space.sample()
     assert actions.shape == (num_envs, env.single_action_space.shape[0])
 
-    obs2, rewards, terminateds, truncateds, infos = env.step(actions)
+    obs2, reward, terminated, truncated, info2 = env.step(actions)
     assert obs2.shape == obs.shape
-    assert rewards.shape == (num_envs,)
-    assert terminateds.shape == (num_envs,)
-    assert truncateds.shape == (num_envs,)
+    assert reward.shape == (num_envs,)
+    assert terminated.shape == (num_envs,)
+    assert truncated.shape == (num_envs,)
+    assert isinstance(reward, jax_module.Array)
     env.close()
 
 
-def test_vector_env_invalid_action_shape():
-    from orca_sim.envs_mjx import OrcaHandMjxVectorEnv
+def test_invalid_action_shape():
+    from orca_sim.envs_mjx import OrcaHandLeftMjx
 
-    env = OrcaHandMjxVectorEnv("scene_left.xml", num_envs=2)
+    env = OrcaHandLeftMjx(num_envs=2)
     env.reset()
     bad = np.zeros((3, env.single_action_space.shape[0]), dtype=np.float32)
     with pytest.raises(ValueError):

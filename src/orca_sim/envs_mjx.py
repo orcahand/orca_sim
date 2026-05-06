@@ -3,7 +3,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import gymnasium as gym
 import jax
 import jax.numpy as jnp
 import mujoco
@@ -55,7 +54,14 @@ def _prepare_mj_model_for_mjx(mj_model: mujoco.MjModel) -> mujoco.MjModel:
     return mj_model
 
 
-def _make_step_fn(mjx_model, frame_skip: int):
+def _make_step_fn(mjx_model, frame_skip, obs_fn, reward_fn, terminated_fn, truncated_fn):
+    """Per-env step returning (mjx_data, obs, reward, terminated, truncated).
+
+    Pure jnp inside; meant to be vmapped over the batch axis and jitted once.
+    The four output callables run on a single (non-batched) mjx_data; vmap
+    handles batching.
+    """
+
     def step(mjx_data, ctrl):
         mjx_data = mjx_data.replace(ctrl=ctrl)
 
@@ -63,31 +69,58 @@ def _make_step_fn(mjx_model, frame_skip: int):
             return mjx.step(mjx_model, d), None
 
         final, _ = jax.lax.scan(body, mjx_data, xs=None, length=frame_skip)
-        return final
+        return (
+            final,
+            obs_fn(final),
+            reward_fn(final),
+            terminated_fn(final),
+            truncated_fn(final),
+        )
 
     return step
 
 
-class BaseOrcaHandMjxEnv(gym.Env[np.ndarray, np.ndarray]):
-    """Single-env Gymnasium wrapper around MJX physics on GPU."""
+class BaseOrcaHandMjxEnv:
+    """Vectorized MJX hand env on the GPU, designed for RL training.
+
+    Physics, observation, reward and termination are computed inside a single
+    jitted+vmapped step so all outputs stay on-device as ``jax.Array`` of shape
+    ``(num_envs, ...)``. Subclasses define a task by overriding ``_obs_fn``,
+    ``_reward_fn``, ``_terminated_fn`` and ``_truncated_fn`` — pure jnp
+    functions of a single ``mjx_data``. The base wires them into the jit at
+    ``__init__`` time, so anything they close over (targets, constants, …)
+    must be a ``jnp`` array or a static scalar at construction.
+
+    Renderer / viewer are instantiated lazily; when ``render_mode is None`` no
+    GPU→CPU sync runs in ``step`` / ``reset``.
+    """
 
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 30}
 
     def __init__(
         self,
         scene_file: str,
+        num_envs: int = 1,
         version: str | None = None,
         frame_skip: int = 5,
         render_mode: str | None = None,
+        render_index: int = 0,
     ) -> None:
-        super().__init__()
+        if num_envs < 1:
+            raise ValueError(f"num_envs must be >= 1, got {num_envs}")
         if render_mode not in {None, "human", "rgb_array"}:
             raise ValueError(f"Unsupported render_mode: {render_mode}")
+        if not 0 <= render_index < num_envs:
+            raise ValueError(
+                f"render_index {render_index} out of range for num_envs={num_envs}"
+            )
 
         self.scene_path = resolve_scene_path(scene_file, version=version)
         self.version = self.scene_path.parent.name
+        self.num_envs = num_envs
         self.frame_skip = frame_skip
         self.render_mode = render_mode
+        self.render_index = render_index
 
         self.model = mujoco.MjModel.from_xml_path(str(self.scene_path))
         _prepare_mj_model_for_mjx(self.model)
@@ -96,10 +129,20 @@ class BaseOrcaHandMjxEnv(gym.Env[np.ndarray, np.ndarray]):
         mujoco.mj_forward(self.model, self._render_data)
 
         self.mjx_model = mjx.put_model(self.model)
-        self.mjx_data = mjx.put_data(self.model, mujoco.MjData(self.model))
+        self._mjx_data0 = mjx.put_data(self.model, mujoco.MjData(self.model))
 
-        self._step_fn = _make_step_fn(self.mjx_model, self.frame_skip)
-        self._jit_step = jax.jit(self._step_fn)
+        self._step_fn = _make_step_fn(
+            self.mjx_model,
+            self.frame_skip,
+            obs_fn=self._obs_fn,
+            reward_fn=self._reward_fn,
+            terminated_fn=self._terminated_fn,
+            truncated_fn=self._truncated_fn,
+        )
+        self._jit_vstep = jax.jit(jax.vmap(self._step_fn, in_axes=(0, 0)))
+        self._jit_vobs = jax.jit(jax.vmap(self._obs_fn))
+
+        self.mjx_data = self._make_initial_batch()
 
         self._renderer: mujoco.Renderer | None = None
         self._viewer: Any | None = None
@@ -107,103 +150,114 @@ class BaseOrcaHandMjxEnv(gym.Env[np.ndarray, np.ndarray]):
         ctrl_range = self.model.actuator_ctrlrange.copy()
         self.action_low = ctrl_range[:, 0].astype(np.float32)
         self.action_high = ctrl_range[:, 1].astype(np.float32)
-        self.action_space = spaces.Box(
+        self.single_action_space = spaces.Box(
             low=self.action_low,
             high=self.action_high,
             dtype=np.float32,
         )
+        self.action_space = spaces.Box(
+            low=np.broadcast_to(self.action_low, (num_envs, self.action_low.size)).copy(),
+            high=np.broadcast_to(self.action_high, (num_envs, self.action_high.size)).copy(),
+            dtype=np.float32,
+        )
 
-        obs = self._get_obs()
+        sample_obs = self._jit_vobs(self.mjx_data)
+        self.single_observation_space = spaces.Box(
+            low=-np.inf,
+            high=np.inf,
+            shape=sample_obs.shape[1:],
+            dtype=np.float64,
+        )
         self.observation_space = spaces.Box(
             low=-np.inf,
             high=np.inf,
-            shape=obs.shape,
+            shape=sample_obs.shape,
             dtype=np.float64,
         )
 
-    def _get_obs(self) -> np.ndarray:
-        return np.concatenate(
-            [np.asarray(self.mjx_data.qpos), np.asarray(self.mjx_data.qvel)]
-        )
+    # ---- override hooks --------------------------------------------------
+    # Pure jnp functions of a single (non-batched) mjx_data. Subclasses replace
+    # these to define a task. They run inside jax.vmap+jax.jit at step time, so
+    # any captured constants must be jnp arrays / static at __init__.
 
-    def _get_reward(self) -> float:
-        return 0.0
+    def _obs_fn(self, mjx_data):
+        return jnp.concatenate([mjx_data.qpos, mjx_data.qvel])
 
-    def _get_terminated(self) -> bool:
-        return False
+    def _reward_fn(self, mjx_data):
+        return jnp.float32(0.0)
 
-    def _get_truncated(self) -> bool:
-        return False
+    def _terminated_fn(self, mjx_data):
+        return jnp.bool_(False)
 
-    def _get_info(self) -> dict[str, Any]:
+    def _truncated_fn(self, mjx_data):
+        return jnp.bool_(False)
+
+    def _get_infos(self) -> dict[str, Any]:
         return {}
 
-    def _sync_render_data(self, mjx_data_single=None) -> None:
-        if mjx_data_single is None:
-            mjx_data_single = self.mjx_data
-        cpu = mjx.get_data(self.model, mjx_data_single)
+    # ---- batched state helpers ------------------------------------------
+
+    def _make_initial_batch(self):
+        return jax.tree_util.tree_map(
+            lambda x: jnp.broadcast_to(x, (self.num_envs,) + x.shape).copy(),
+            self._mjx_data0,
+        )
+
+    def _slice_render_env(self):
+        return jax.tree_util.tree_map(
+            lambda x: x[self.render_index], self.mjx_data
+        )
+
+    def _sync_render_data(self) -> None:
+        single = self._slice_render_env()
+        cpu = mjx.get_data(self.model, single)
         self._render_data.qpos[:] = cpu.qpos
         self._render_data.qvel[:] = cpu.qvel
         self._render_data.ctrl[:] = cpu.ctrl
         self._render_data.time = float(cpu.time)
         mujoco.mj_forward(self.model, self._render_data)
 
+    # ---- public API ------------------------------------------------------
+
     def reset(
         self,
         *,
         seed: int | None = None,
         options: dict[str, Any] | None = None,
-    ) -> tuple[np.ndarray, dict[str, Any]]:
-        super().reset(seed=seed)
-        self.mjx_data = mjx.make_data(self.mjx_model)
+    ) -> tuple[jax.Array, dict[str, Any]]:
+        del seed, options
+        self.mjx_data = self._make_initial_batch()
+        obs = self._jit_vobs(self.mjx_data)
 
-        if options and "qpos" in options:
-            qpos = np.asarray(options["qpos"], dtype=np.float64)
-            if qpos.shape != self.mjx_data.qpos.shape:
-                raise ValueError(
-                    f"Expected qpos shape {self.mjx_data.qpos.shape}, got {qpos.shape}"
-                )
-            self.mjx_data = self.mjx_data.replace(qpos=jnp.asarray(qpos))
+        if self.render_mode is not None:
+            self._sync_render_data()
+            if self.render_mode == "human":
+                self.render()
 
-        if options and "qvel" in options:
-            qvel = np.asarray(options["qvel"], dtype=np.float64)
-            if qvel.shape != self.mjx_data.qvel.shape:
-                raise ValueError(
-                    f"Expected qvel shape {self.mjx_data.qvel.shape}, got {qvel.shape}"
-                )
-            self.mjx_data = self.mjx_data.replace(qvel=jnp.asarray(qvel))
-
-        self.mjx_data = mjx.forward(self.mjx_model, self.mjx_data)
-
-        self._sync_render_data()
-        if self.render_mode == "human":
-            self.render()
-
-        return self._get_obs(), self._get_info()
+        return obs, self._get_infos()
 
     def step(
-        self, action: np.ndarray
-    ) -> tuple[np.ndarray, float, bool, bool, dict[str, Any]]:
-        action = np.asarray(action, dtype=np.float32)
-        if action.shape != self.action_space.shape:
+        self, actions: np.ndarray
+    ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, dict[str, Any]]:
+        actions = np.asarray(actions, dtype=np.float32)
+        expected = (self.num_envs, self.action_low.size)
+        if actions.shape != expected:
             raise ValueError(
-                f"Expected action shape {self.action_space.shape}, got {action.shape}"
+                f"Expected action shape {expected}, got {actions.shape}"
             )
 
-        clipped = np.clip(action, self.action_low, self.action_high)
-        self.mjx_data = self._jit_step(self.mjx_data, jnp.asarray(clipped))
+        clipped = np.clip(actions, self.action_low, self.action_high)
+        self.mjx_data, obs, rewards, terminateds, truncateds = self._jit_vstep(
+            self.mjx_data, jnp.asarray(clipped)
+        )
+        infos = self._get_infos()
 
-        obs = self._get_obs()
-        reward = self._get_reward()
-        terminated = self._get_terminated()
-        truncated = self._get_truncated()
-        info = self._get_info()
+        if self.render_mode is not None:
+            self._sync_render_data()
+            if self.render_mode == "human":
+                self.render()
 
-        self._sync_render_data()
-        if self.render_mode == "human":
-            self.render()
-
-        return obs, reward, terminated, truncated, info
+        return obs, rewards, terminateds, truncateds, infos
 
     def render(self) -> np.ndarray | None:
         if self.render_mode == "rgb_array":
@@ -243,273 +297,106 @@ class BaseOrcaHandMjxEnv(gym.Env[np.ndarray, np.ndarray]):
 class OrcaHandLeftMjx(BaseOrcaHandMjxEnv):
     def __init__(
         self,
-        render_mode: str | None = None,
+        num_envs: int = 1,
         version: str | None = None,
+        render_mode: str | None = None,
+        render_index: int = 0,
     ) -> None:
         super().__init__(
-            "scene_left.xml",
+            scene_file="scene_left.xml",
+            num_envs=num_envs,
             version=version,
             frame_skip=5,
             render_mode=render_mode,
+            render_index=render_index,
         )
 
 
 class OrcaHandRightMjx(BaseOrcaHandMjxEnv):
     def __init__(
         self,
-        render_mode: str | None = None,
+        num_envs: int = 1,
         version: str | None = None,
+        render_mode: str | None = None,
+        render_index: int = 0,
     ) -> None:
         super().__init__(
-            "scene_right.xml",
+            scene_file="scene_right.xml",
+            num_envs=num_envs,
             version=version,
             frame_skip=5,
             render_mode=render_mode,
+            render_index=render_index,
         )
 
 
 class OrcaHandCombinedMjx(BaseOrcaHandMjxEnv):
     def __init__(
         self,
-        render_mode: str | None = None,
+        num_envs: int = 1,
         version: str | None = None,
+        render_mode: str | None = None,
+        render_index: int = 0,
     ) -> None:
         super().__init__(
-            "scene_combined.xml",
+            scene_file="scene_combined.xml",
+            num_envs=num_envs,
             version=version,
             frame_skip=5,
             render_mode=render_mode,
+            render_index=render_index,
         )
 
 
 class OrcaHandLeftExtendedMjx(BaseOrcaHandMjxEnv):
     def __init__(
         self,
-        render_mode: str | None = None,
+        num_envs: int = 1,
         version: str | None = None,
+        render_mode: str | None = None,
+        render_index: int = 0,
     ) -> None:
         super().__init__(
-            "scene_left_extended.xml",
+            scene_file="scene_left_extended.xml",
+            num_envs=num_envs,
             version=version,
             frame_skip=5,
             render_mode=render_mode,
+            render_index=render_index,
         )
 
 
 class OrcaHandRightExtendedMjx(BaseOrcaHandMjxEnv):
     def __init__(
         self,
-        render_mode: str | None = None,
+        num_envs: int = 1,
         version: str | None = None,
+        render_mode: str | None = None,
+        render_index: int = 0,
     ) -> None:
         super().__init__(
-            "scene_right_extended.xml",
+            scene_file="scene_right_extended.xml",
+            num_envs=num_envs,
             version=version,
             frame_skip=5,
             render_mode=render_mode,
+            render_index=render_index,
         )
 
 
 class OrcaHandCombinedExtendedMjx(BaseOrcaHandMjxEnv):
     def __init__(
         self,
-        render_mode: str | None = None,
+        num_envs: int = 1,
         version: str | None = None,
-    ) -> None:
-        super().__init__(
-            "scene_combined_extended.xml",
-            version=version,
-            frame_skip=5,
-            render_mode=render_mode,
-        )
-
-
-class OrcaHandMjxVectorEnv:
-    """Batched MJX rollouts for many parallel hands on the GPU.
-
-    Custom batched API (not gymnasium.VectorEnv): `reset` / `step` operate on
-    leading batch axis. `render()` shows a single chosen env (default 0) so the
-    standard MuJoCo viewer / Renderer can be used unchanged.
-    """
-
-    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 30}
-
-    def __init__(
-        self,
-        scene_file: str,
-        num_envs: int,
-        version: str | None = None,
-        frame_skip: int = 5,
         render_mode: str | None = None,
         render_index: int = 0,
     ) -> None:
-        if num_envs < 1:
-            raise ValueError(f"num_envs must be >= 1, got {num_envs}")
-        if render_mode not in {None, "human", "rgb_array"}:
-            raise ValueError(f"Unsupported render_mode: {render_mode}")
-        if not 0 <= render_index < num_envs:
-            raise ValueError(
-                f"render_index {render_index} out of range for num_envs={num_envs}"
-            )
-
-        self.scene_path = resolve_scene_path(scene_file, version=version)
-        self.version = self.scene_path.parent.name
-        self.num_envs = num_envs
-        self.frame_skip = frame_skip
-        self.render_mode = render_mode
-        self.render_index = render_index
-
-        self.model = mujoco.MjModel.from_xml_path(str(self.scene_path))
-        _prepare_mj_model_for_mjx(self.model)
-
-        self._render_data = mujoco.MjData(self.model)
-        mujoco.mj_forward(self.model, self._render_data)
-
-        self.mjx_model = mjx.put_model(self.model)
-        self._mjx_data0 = mjx.put_data(self.model, mujoco.MjData(self.model))
-
-        self._step_fn = _make_step_fn(self.mjx_model, self.frame_skip)
-        self._jit_vstep = jax.jit(jax.vmap(self._step_fn, in_axes=(0, 0)))
-
-        self.mjx_data = self._make_initial_batch()
-
-        self._renderer: mujoco.Renderer | None = None
-        self._viewer: Any | None = None
-
-        ctrl_range = self.model.actuator_ctrlrange.copy()
-        self.action_low = ctrl_range[:, 0].astype(np.float32)
-        self.action_high = ctrl_range[:, 1].astype(np.float32)
-        self.single_action_space = spaces.Box(
-            low=self.action_low,
-            high=self.action_high,
-            dtype=np.float32,
+        super().__init__(
+            scene_file="scene_combined_extended.xml",
+            num_envs=num_envs,
+            version=version,
+            frame_skip=5,
+            render_mode=render_mode,
+            render_index=render_index,
         )
-        self.action_space = spaces.Box(
-            low=np.broadcast_to(self.action_low, (num_envs, self.action_low.size)).copy(),
-            high=np.broadcast_to(self.action_high, (num_envs, self.action_high.size)).copy(),
-            dtype=np.float32,
-        )
-
-        obs = self._get_obs()
-        self.single_observation_space = spaces.Box(
-            low=-np.inf,
-            high=np.inf,
-            shape=obs.shape[1:],
-            dtype=np.float64,
-        )
-        self.observation_space = spaces.Box(
-            low=-np.inf,
-            high=np.inf,
-            shape=obs.shape,
-            dtype=np.float64,
-        )
-
-    def _make_initial_batch(self):
-        return jax.tree_util.tree_map(
-            lambda x: jnp.broadcast_to(x, (self.num_envs,) + x.shape).copy(),
-            self._mjx_data0,
-        )
-
-    def _get_obs(self) -> np.ndarray:
-        return np.concatenate(
-            [np.asarray(self.mjx_data.qpos), np.asarray(self.mjx_data.qvel)],
-            axis=-1,
-        )
-
-    def _get_rewards(self) -> np.ndarray:
-        return np.zeros(self.num_envs, dtype=np.float64)
-
-    def _get_terminateds(self) -> np.ndarray:
-        return np.zeros(self.num_envs, dtype=bool)
-
-    def _get_truncateds(self) -> np.ndarray:
-        return np.zeros(self.num_envs, dtype=bool)
-
-    def _get_infos(self) -> dict[str, Any]:
-        return {}
-
-    def _slice_render_env(self):
-        return jax.tree_util.tree_map(
-            lambda x: x[self.render_index], self.mjx_data
-        )
-
-    def _sync_render_data(self) -> None:
-        single = self._slice_render_env()
-        cpu = mjx.get_data(self.model, single)
-        self._render_data.qpos[:] = cpu.qpos
-        self._render_data.qvel[:] = cpu.qvel
-        self._render_data.ctrl[:] = cpu.ctrl
-        self._render_data.time = float(cpu.time)
-        mujoco.mj_forward(self.model, self._render_data)
-
-    def reset(
-        self,
-        *,
-        seed: int | None = None,
-        options: dict[str, Any] | None = None,
-    ) -> tuple[np.ndarray, dict[str, Any]]:
-        del seed, options
-        self.mjx_data = self._make_initial_batch()
-        self._sync_render_data()
-        if self.render_mode == "human":
-            self.render()
-        return self._get_obs(), self._get_infos()
-
-    def step(
-        self, actions: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict[str, Any]]:
-        actions = np.asarray(actions, dtype=np.float32)
-        expected = (self.num_envs, self.action_low.size)
-        if actions.shape != expected:
-            raise ValueError(
-                f"Expected action shape {expected}, got {actions.shape}"
-            )
-
-        clipped = np.clip(actions, self.action_low, self.action_high)
-        self.mjx_data = self._jit_vstep(self.mjx_data, jnp.asarray(clipped))
-
-        obs = self._get_obs()
-        rewards = self._get_rewards()
-        terminateds = self._get_terminateds()
-        truncateds = self._get_truncateds()
-        infos = self._get_infos()
-
-        self._sync_render_data()
-        if self.render_mode == "human":
-            self.render()
-
-        return obs, rewards, terminateds, truncateds, infos
-
-    def render(self) -> np.ndarray | None:
-        if self.render_mode == "rgb_array":
-            if self._renderer is None:
-                self._renderer = mujoco.Renderer(self.model)
-            self._renderer.update_scene(self._render_data)
-            return self._renderer.render()
-
-        if self.render_mode == "human":
-            if self._viewer is None:
-                from mujoco import viewer
-
-                try:
-                    self._viewer = viewer.launch_passive(self.model, self._render_data)
-                except RuntimeError as exc:
-                    if sys.platform == "darwin" and "mjpython" in str(exc):
-                        raise RuntimeError(
-                            "On macOS, MuJoCo human rendering must be launched with "
-                            "`mjpython`, not plain `python3`."
-                        ) from exc
-                    raise
-                mujoco.mjv_defaultFreeCamera(self.model, self._viewer.cam)
-            self._viewer.sync()
-            return None
-
-        return None
-
-    def close(self) -> None:
-        if self._renderer is not None:
-            self._renderer.close()
-            self._renderer = None
-        if self._viewer is not None:
-            self._viewer.close()
-            self._viewer = None

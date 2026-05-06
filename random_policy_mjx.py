@@ -15,7 +15,6 @@ try:
         OrcaHandCombinedMjx,
         OrcaHandLeftExtendedMjx,
         OrcaHandLeftMjx,
-        OrcaHandMjxVectorEnv,
         OrcaHandRightExtendedMjx,
         OrcaHandRightMjx,
     )
@@ -26,22 +25,13 @@ except ModuleNotFoundError as exc:
     ) from exc
 
 
-SINGLE_ENV_BUILDERS = {
+ENV_BUILDERS = {
     "left": OrcaHandLeftMjx,
     "left_extended": OrcaHandLeftExtendedMjx,
     "right": OrcaHandRightMjx,
     "right_extended": OrcaHandRightExtendedMjx,
     "combined": OrcaHandCombinedMjx,
     "combined_extended": OrcaHandCombinedExtendedMjx,
-}
-
-ENV_TO_SCENE = {
-    "left": "scene_left.xml",
-    "left_extended": "scene_left_extended.xml",
-    "right": "scene_right.xml",
-    "right_extended": "scene_right_extended.xml",
-    "combined": "scene_combined.xml",
-    "combined_extended": "scene_combined_extended.xml",
 }
 
 
@@ -51,7 +41,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--env",
-        choices=sorted(SINGLE_ENV_BUILDERS),
+        choices=sorted(ENV_BUILDERS),
         default="left",
         help="Environment variant to load.",
     )
@@ -64,18 +54,19 @@ def main() -> None:
         "--num-envs",
         type=int,
         default=1,
-        help="Number of parallel envs. 1 -> single-env path; >1 -> vectorized.",
+        help="Number of parallel envs in the batched MJX rollout.",
     )
     parser.add_argument(
         "--render-mode",
-        choices=["human", "rgb_array"],
+        choices=["human", "rgb_array", "headless"],
         default="human",
+        help="'headless' skips all GPU<->CPU sync and renderer setup.",
     )
     parser.add_argument(
         "--render-index",
         type=int,
         default=0,
-        help="Which env to render in vectorized mode.",
+        help="Which env in the batch to display when rendering.",
     )
     parser.add_argument(
         "--steps",
@@ -91,18 +82,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if args.num_envs == 1:
-        env = SINGLE_ENV_BUILDERS[args.env](
-            render_mode=args.render_mode, version=args.version
-        )
-    else:
-        env = OrcaHandMjxVectorEnv(
-            ENV_TO_SCENE[args.env],
-            num_envs=args.num_envs,
-            version=args.version,
-            render_mode=args.render_mode,
-            render_index=args.render_index,
-        )
+    render_mode = None if args.render_mode == "headless" else args.render_mode
+    env = ENV_BUILDERS[args.env](
+        num_envs=args.num_envs,
+        version=args.version,
+        render_mode=render_mode,
+        render_index=args.render_index,
+    )
 
     if args.seed is not None:
         env.action_space.seed(args.seed)
@@ -124,22 +110,22 @@ def main() -> None:
             obs, reward, terminated, truncated, info = env.step(action)
             dt = time.perf_counter() - t0
 
-            if args.render_mode == "rgb_array":
+            mean_reward = float(reward.mean())
+            if render_mode == "rgb_array":
                 frame = env.render()
                 print(
                     f"step={step} frame_shape={None if frame is None else frame.shape} "
-                    f"step_dt={dt*1000:.2f}ms reward={reward}"
+                    f"step_dt={dt*1000:.2f}ms mean_reward={mean_reward:.4f}"
                 )
             else:
                 print(
                     f"step={step} step_dt={dt*1000:.2f}ms "
-                    f"reward={reward} terminated={terminated} truncated={truncated}"
+                    f"mean_reward={mean_reward:.4f} "
+                    f"any_terminated={bool(terminated.any())} "
+                    f"any_truncated={bool(truncated.any())}"
                 )
-                time.sleep(max(0.0, 1.0 / env.metadata["render_fps"] - dt))
-
-            if args.num_envs == 1 and (terminated or truncated):
-                obs, info = env.reset()
-                print(f"reset step={step} info={info}")
+                if render_mode == "human":
+                    time.sleep(max(0.0, 1.0 / env.metadata["render_fps"] - dt))
 
             step += 1
     except KeyboardInterrupt:

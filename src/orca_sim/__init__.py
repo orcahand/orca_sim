@@ -33,7 +33,6 @@ try:
         OrcaHandCombinedMjx,
         OrcaHandLeftExtendedMjx,
         OrcaHandLeftMjx,
-        OrcaHandMjxVectorEnv,
         OrcaHandRightExtendedMjx,
         OrcaHandRightMjx,
     )
@@ -46,7 +45,6 @@ else:
         "OrcaHandCombinedMjx",
         "OrcaHandLeftExtendedMjx",
         "OrcaHandLeftMjx",
-        "OrcaHandMjxVectorEnv",
         "OrcaHandRightExtendedMjx",
         "OrcaHandRightMjx",
     ]
