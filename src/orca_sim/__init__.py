@@ -25,3 +25,28 @@ __all__ = [
     "list_versions",
     "register_envs",
 ]
+
+try:
+    from orca_sim.envs_mjx import (
+        BaseOrcaHandMjxEnv,
+        OrcaHandCombinedExtendedMjx,
+        OrcaHandCombinedMjx,
+        OrcaHandLeftExtendedMjx,
+        OrcaHandLeftMjx,
+        OrcaHandMjxVectorEnv,
+        OrcaHandRightExtendedMjx,
+        OrcaHandRightMjx,
+    )
+except ImportError:
+    pass
+else:
+    __all__ += [
+        "BaseOrcaHandMjxEnv",
+        "OrcaHandCombinedExtendedMjx",
+        "OrcaHandCombinedMjx",
+        "OrcaHandLeftExtendedMjx",
+        "OrcaHandLeftMjx",
+        "OrcaHandMjxVectorEnv",
+        "OrcaHandRightExtendedMjx",
+        "OrcaHandRightMjx",
+    ]

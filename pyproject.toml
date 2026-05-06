@@ -21,6 +21,10 @@ dependencies = [
 dev = [
   "pytest>=8",
 ]
+mjx = [
+  "mujoco-mjx>=3.8",
+  "jax>=0.4.30",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
