@@ -24,6 +24,8 @@ dev = [
 mjx = [
   "mujoco-mjx>=3.8",
   "jax>=0.4.30",
+  "flax>=0.8",
+  "optax>=0.2",
 ]
 
 [tool.pytest.ini_options]

@@ -36,6 +36,7 @@ try:
         OrcaHandRightExtendedMjx,
         OrcaHandRightMjx,
     )
+    from orca_sim.task_envs_mjx import OrcaHandRightCubeOrientationMjx
 except ImportError:
     pass
 else:
@@ -45,6 +46,7 @@ else:
         "OrcaHandCombinedMjx",
         "OrcaHandLeftExtendedMjx",
         "OrcaHandLeftMjx",
+        "OrcaHandRightCubeOrientationMjx",
         "OrcaHandRightExtendedMjx",
         "OrcaHandRightMjx",
     ]

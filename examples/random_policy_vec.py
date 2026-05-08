@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 
 
-REPO_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = REPO_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
@@ -18,6 +18,7 @@ try:
         OrcaHandRightExtendedMjx,
         OrcaHandRightMjx,
     )
+    from orca_sim.task_envs_mjx import OrcaHandRightCubeOrientationMjx
 except ModuleNotFoundError as exc:
     raise SystemExit(
         f"Missing runtime dependency '{exc.name}'. Activate the conda env "
@@ -29,6 +30,7 @@ ENV_BUILDERS = {
     "left": OrcaHandLeftMjx,
     "left_extended": OrcaHandLeftExtendedMjx,
     "right": OrcaHandRightMjx,
+    "right_cube_orientation": OrcaHandRightCubeOrientationMjx,
     "right_extended": OrcaHandRightExtendedMjx,
     "combined": OrcaHandCombinedMjx,
     "combined_extended": OrcaHandCombinedExtendedMjx,

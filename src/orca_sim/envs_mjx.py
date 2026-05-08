@@ -131,6 +131,8 @@ class BaseOrcaHandMjxEnv:
         self.mjx_model = mjx.put_model(self.model)
         self._mjx_data0 = mjx.put_data(self.model, mujoco.MjData(self.model))
 
+        self._setup_task()
+
         self._step_fn = _make_step_fn(
             self.mjx_model,
             self.frame_skip,
@@ -179,6 +181,14 @@ class BaseOrcaHandMjxEnv:
     # Pure jnp functions of a single (non-batched) mjx_data. Subclasses replace
     # these to define a task. They run inside jax.vmap+jax.jit at step time, so
     # any captured constants must be jnp arrays / static at __init__.
+
+    def _setup_task(self) -> None:
+        """Resolve task-specific indices / jnp constants from self.model.
+
+        Called by __init__ after the model is loaded but before _obs_fn,
+        _reward_fn, _terminated_fn, _truncated_fn are jit-traced. Subclasses
+        override to populate attributes referenced inside those hooks.
+        """
 
     def _obs_fn(self, mjx_data):
         return jnp.concatenate([mjx_data.qpos, mjx_data.qvel])
