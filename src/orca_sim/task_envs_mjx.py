@@ -19,6 +19,7 @@ class OrcaHandRightCubeOrientationMjx(BaseOrcaHandMjxEnv):
     RED_DOWN_QUAT = np.array([0.0, 1.0, 0.0, 0.0], dtype=np.float64)
     RED_FACE_LOCAL_NORMAL = np.array([0.0, 0.0, 1.0], dtype=np.float64)
     WORLD_UP = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+    SUCCESS_HOLD_STEPS = 10
 
     def __init__(
         self,
@@ -36,6 +37,8 @@ class OrcaHandRightCubeOrientationMjx(BaseOrcaHandMjxEnv):
         max_episode_steps: int = 200,
         success_tolerance_rad: float = float(np.deg2rad(15.0)),
         drop_height: float = 0.05,
+        timestep: float = 0.005,
+        frame_skip: int = 2,
     ) -> None:
         self.scene_file = scene_file
         self.cube_joint_name = cube_joint_name
@@ -54,9 +57,10 @@ class OrcaHandRightCubeOrientationMjx(BaseOrcaHandMjxEnv):
             scene_file,
             num_envs=num_envs,
             version=version,
-            frame_skip=5,
+            frame_skip=frame_skip,
             render_mode=render_mode,
             render_index=render_index,
+            timestep=timestep,
         )
 
         self._actuator_qpos_indices = self._resolve_actuator_qpos_indices()
@@ -114,6 +118,7 @@ class OrcaHandRightCubeOrientationMjx(BaseOrcaHandMjxEnv):
         self._reset_quat_bank_jax = jnp.asarray(
             bank_np, dtype=self._mjx_data0.qpos.dtype
         )
+        self._success_counts = jnp.zeros(self.num_envs, dtype=jnp.int32)
 
     # ---- jit-time setup --------------------------------------------------
 
@@ -173,9 +178,6 @@ class OrcaHandRightCubeOrientationMjx(BaseOrcaHandMjxEnv):
     def _red_face_up_angle_rad(self, mjx_data) -> jnp.ndarray:
         return jnp.arccos(jnp.clip(self._red_face_up_alignment(mjx_data), -1.0, 1.0))
 
-    def _goal_reached(self, mjx_data) -> jnp.ndarray:
-        return self._red_face_up_alignment(mjx_data) >= self._success_alignment
-
     def _cube_dropped(self, mjx_data) -> jnp.ndarray:
         return mjx_data.qpos[self._cube_qpos_adr + 2] < self._drop_height_jax
 
@@ -200,10 +202,24 @@ class OrcaHandRightCubeOrientationMjx(BaseOrcaHandMjxEnv):
         return jnp.float32(alignment_reward + 0.10 * lift_bonus - drop_penalty)
 
     def _terminated_fn(self, mjx_data):
-        return self._goal_reached(mjx_data) | self._cube_dropped(mjx_data)
+        return self._cube_dropped(mjx_data)
 
     def _truncated_fn(self, mjx_data):
         return mjx_data.time >= self._max_episode_time
+
+    def step(self, actions):
+        obs, rewards, terminateds, truncateds, infos = super().step(actions)
+
+        alignment = infos["red_face_up_alignment"]
+        is_aligned = alignment >= self._success_alignment
+        self._success_counts = jnp.where(
+            is_aligned, self._success_counts + 1, jnp.zeros_like(self._success_counts)
+        )
+        goal_reached = self._success_counts >= self.SUCCESS_HOLD_STEPS
+        terminateds = terminateds | goal_reached
+        infos["is_success"] = goal_reached
+
+        return obs, rewards, terminateds, truncateds, infos
 
     # ---- on-device per-env reset (used by training rollouts) -------------
 
@@ -497,6 +513,7 @@ class OrcaHandRightCubeOrientationMjx(BaseOrcaHandMjxEnv):
             )
 
         obs = self._jit_vobs(self.mjx_data)
+        self._success_counts = jnp.zeros(self.num_envs, dtype=jnp.int32)
 
         if self.render_mode is not None:
             self._sync_render_data()

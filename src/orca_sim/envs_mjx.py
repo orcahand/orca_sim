@@ -13,39 +13,42 @@ from mujoco import mjx
 from orca_sim.versions import resolve_scene_path
 
 
-def _enable_jax_compilation_cache() -> None:
-    """Point JAX at a persistent on-disk compile cache.
-
-    First MJX compile of an orca scene takes ~60-120s. With a populated cache,
-    subsequent runs of the same model+JAX+CUDA combination skip the compile
-    almost entirely. Override / disable via env vars:
-      ORCA_SIM_JAX_CACHE=0          # skip wiring the cache
-      ORCA_SIM_JAX_CACHE_DIR=/path  # custom location (default: ~/.cache/orca_sim/jax)
-    Already-set JAX_COMPILATION_CACHE_DIR is honored and never overwritten.
-    """
-    if os.environ.get("ORCA_SIM_JAX_CACHE", "1") == "0":
-        return
-    if os.environ.get("JAX_COMPILATION_CACHE_DIR"):
-        return  # user already configured one; don't override.
-    if jax.config.jax_compilation_cache_dir:
-        return  # already set elsewhere in this process.
-
-    cache_dir = os.environ.get("ORCA_SIM_JAX_CACHE_DIR")
-    if cache_dir is None:
-        cache_dir = str(Path.home() / ".cache" / "orca_sim" / "jax")
-    Path(cache_dir).mkdir(parents=True, exist_ok=True)
-    jax.config.update("jax_compilation_cache_dir", cache_dir)
-
-
-_enable_jax_compilation_cache()
-
-
+# def _enable_jax_compilation_cache() -> None:
+#     """Point JAX at a persistent on-disk compile cache.
+#
+#     First MJX compile of an orca scene takes ~60-120s. With a populated cache,
+#     subsequent runs of the same model+JAX+CUDA combination skip the compile
+#     almost entirely. Override / disable via env vars:
+#       ORCA_SIM_JAX_CACHE=0          # skip wiring the cache
+#       ORCA_SIM_JAX_CACHE_DIR=/path  # custom location (default: ~/.cache/orca_sim/jax)
+#     Already-set JAX_COMPILATION_CACHE_DIR is honored and never overwritten.
+#     """
+#     if os.environ.get("ORCA_SIM_JAX_CACHE", "1") == "0":
+#         return
+#     if os.environ.get("JAX_COMPILATION_CACHE_DIR"):
+#         return  # user already configured one; don't override.
+#     if jax.config.jax_compilation_cache_dir:
+#         return  # already set elsewhere in this process.
+#
+#     cache_dir = os.environ.get("ORCA_SIM_JAX_CACHE_DIR")
+#     if cache_dir is None:
+#         cache_dir = str(Path.home() / ".cache" / "orca_sim" / "jax")
+#     Path(cache_dir).mkdir(parents=True, exist_ok=True)
+#     jax.config.update("jax_compilation_cache_dir", cache_dir)
+#
+#
+# _enable_jax_compilation_cache()
+#
+#
 def _prepare_mj_model_for_mjx(mj_model: mujoco.MjModel) -> mujoco.MjModel:
-    # MJX prefers CG with low iteration counts; the orca scenes don't pin a solver
-    # so the CPU default (Newton) leaks through. Set CG before mjx.put_model.
-    mj_model.opt.solver = mujoco.mjtSolver.mjSOL_CG
-    mj_model.opt.iterations = 6
-    mj_model.opt.ls_iterations = 6
+    mj_model.opt.solver = mujoco.mjtSolver.mjSOL_NEWTON
+    mj_model.opt.cone = mujoco.mjtCone.mjCONE_ELLIPTIC
+    mj_model.opt.impratio = 10.0
+    mj_model.opt.iterations = 10
+    mj_model.opt.ls_iterations = 10
+    # Stiffen default contact solref (was [0.02, 1.0]); 0.005s time-constant
+    # is ~5x the 0.001s substep, keeping contacts well-resolved.
+    mj_model.opt.o_solref[:] = np.array([0.005, 1.0])
     # MJX does not implement margin/gap for plane<->mesh contacts. The orca hand
     # mjcf defaults geom margin to 0.5mm; zero it (and gap) so plane-vs-finger
     # contact compiles. Runtime-only — CPU envs in envs.py are unaffected.
@@ -105,6 +108,7 @@ class BaseOrcaHandMjxEnv:
         frame_skip: int = 5,
         render_mode: str | None = None,
         render_index: int = 0,
+        timestep: float | None = None,
     ) -> None:
         if num_envs < 1:
             raise ValueError(f"num_envs must be >= 1, got {num_envs}")
@@ -119,11 +123,14 @@ class BaseOrcaHandMjxEnv:
         self.version = self.scene_path.parent.name
         self.num_envs = num_envs
         self.frame_skip = frame_skip
+        self.jit_step = jax.jit(jax.vmap(mjx.step, in_axes=(None, 0)))
         self.render_mode = render_mode
         self.render_index = render_index
 
         self.model = mujoco.MjModel.from_xml_path(str(self.scene_path))
         _prepare_mj_model_for_mjx(self.model)
+        if timestep is not None:
+            self.model.opt.timestep = float(timestep)
 
         self._render_data = mujoco.MjData(self.model)
         mujoco.mj_forward(self.model, self._render_data)
@@ -142,7 +149,10 @@ class BaseOrcaHandMjxEnv:
             truncated_fn=self._truncated_fn,
         )
         self._jit_vstep = jax.jit(jax.vmap(self._step_fn, in_axes=(0, 0)))
-        self._jit_vobs = jax.jit(jax.vmap(self._obs_fn))
+        self._jit_vobs    = jax.jit(jax.vmap(self._obs_fn))
+        self._jit_vreward = jax.jit(jax.vmap(self._reward_fn))
+        self._jit_vterm   = jax.jit(jax.vmap(self._terminated_fn))
+        self._jit_vtrunc  = jax.jit(jax.vmap(self._truncated_fn))
 
         self.mjx_data = self._make_initial_batch()
 
