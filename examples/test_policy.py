@@ -111,7 +111,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--frame-skip",
         type=int,
-        default=5,
+        default=2,
         help="Substeps per env-step. Default 2 matches the MJX training config.",
     )
     parser.add_argument(
