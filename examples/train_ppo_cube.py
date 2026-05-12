@@ -16,6 +16,7 @@ After training:
 from __future__ import annotations
 
 import argparse
+import os
 import pickle
 import sys
 import time
@@ -28,6 +29,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = REPO_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
+
+
+# Don't pre-allocate 75 % of the GPU at startup; lets XLA's autotuner profile
+# GEMM candidates with full headroom and reduces fragmentation OOMs. Must run
+# before `import jax`.
+os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
 
 
 try:
@@ -49,7 +56,7 @@ from orca_sim.task_envs_mjx import OrcaHandRightCubeOrientationMjx
 @dataclass
 class Hyperparams:
     num_timesteps: int = 50_000_000
-    num_envs: int = 2048
+    num_envs: int = 1024
     rollout_steps: int = 32
     num_epochs: int = 4
     num_minibatches: int = 8
@@ -307,7 +314,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--version", default=None, help="Embodiment version, e.g. v2.")
     parser.add_argument("--num-timesteps", type=int, default=50_000_000)
-    parser.add_argument("--num-envs", type=int, default=2048)
+    parser.add_argument("--num-envs", type=int, default=1024)
     parser.add_argument("--rollout-steps", type=int, default=32)
     parser.add_argument("--num-epochs", type=int, default=4)
     parser.add_argument("--num-minibatches", type=int, default=8)

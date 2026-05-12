@@ -106,28 +106,30 @@ def main() -> None:
         while True:
             if args.steps and step >= args.steps:
                 break
-
             action = env.action_space.sample()
             t0 = time.perf_counter()
             obs, reward, terminated, truncated, info = env.step(action)
             dt = time.perf_counter() - t0
 
-            mean_reward = float(reward.mean())
-            if render_mode == "rgb_array":
-                frame = env.render()
-                print(
-                    f"step={step} frame_shape={None if frame is None else frame.shape} "
-                    f"step_dt={dt*1000:.2f}ms mean_reward={mean_reward:.4f}"
-                )
-            else:
-                print(
-                    f"step={step} step_dt={dt*1000:.2f}ms "
-                    f"mean_reward={mean_reward:.4f} "
-                    f"any_terminated={bool(terminated.any())} "
-                    f"any_truncated={bool(truncated.any())}"
-                )
-                if render_mode == "human":
-                    time.sleep(max(0.0, 1.0 / env.metadata["render_fps"] - dt))
+            if step % 50 == 0:
+                # Host sync only every 50 steps so the GPU pipeline stays full.
+                mean_reward = float(reward.mean())
+                if render_mode == "rgb_array":
+                    frame = env.render()
+                    print(
+                        f"step={step} frame_shape={None if frame is None else frame.shape} "
+                        f"step_dt={dt*1000:.2f}ms mean_reward={mean_reward:.4f}"
+                    )
+                else:
+                    print(
+                        f"step={step} step_dt={dt*1000:.2f}ms "
+                        f"mean_reward={mean_reward:.4f} "
+                        f"any_terminated={bool(terminated.any())} "
+                        f"any_truncated={bool(truncated.any())}"
+                    )
+
+            if render_mode == "human":
+                time.sleep(max(0.0, 1.0 / env.metadata["render_fps"] - dt))
 
             step += 1
     except KeyboardInterrupt:
