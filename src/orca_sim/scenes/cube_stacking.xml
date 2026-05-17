@@ -1,0 +1,57 @@
+<?xml version="1.0" ?>
+<mujoco model="ORCA cube stacking tabletop scene">
+
+  <include file="../models/v2/assets/scene.xml"/>
+  <include file="../models/v2/assets/options.xml"/>
+
+  <asset>
+    <material name="tabletop" rgba="0.55 0.50 0.44 1" shininess="0.15" specular="0.25"/>
+    <material name="table_legs" rgba="0.28 0.29 0.30 1" shininess="0.2" specular="0.2"/>
+    <material name="cube_red" rgba="0.9 0.05 0.04 1" shininess="0.25" specular="0.25"/>
+    <material name="cube_blue" rgba="0.04 0.22 0.9 1" shininess="0.25" specular="0.25"/>
+    <material name="stack_target" rgba="0.05 0.8 0.25 0.45" shininess="0.1" specular="0.1"/>
+  </asset>
+
+  <statistic extent="0.7" center="0.38 0 0.34"/>
+
+  <worldbody>
+    <light name="table_key_light" pos="-0.35 -0.4 1.2" dir="0.2 0.25 -1" directional="true" diffuse="0.7 0.7 0.7" specular="0.2 0.2 0.2"/>
+    <light name="table_fill_light" pos="0.35 0.3 0.9" dir="-0.2 -0.1 -1" diffuse="0.35 0.35 0.35" specular="0.05 0.05 0.05"/>
+
+    <camera name="topdown" pos="0.38 0 1.1" xyaxes="1 0 0 0 1 0" fovy="45"/>
+    <camera name="angled" pos="0.8 -0.55 0.72" xyaxes="0.8 0.6 0 -0.35 0.47 0.81" fovy="50"/>
+
+    <body name="table" pos="0.38 0 0.30">
+      <geom name="tabletop" type="box" pos="0 0 0" size="0.25 0.35 0.025" material="tabletop" friction="1.2 0.01 0.002"/>
+      <geom name="table_leg_front_left" type="cylinder" pos="-0.2 -0.3 -0.1375" size="0.012 0.1375" material="table_legs" contype="0" conaffinity="0"/>
+      <geom name="table_leg_front_right" type="cylinder" pos="0.2 -0.3 -0.1375" size="0.012 0.1375" material="table_legs" contype="0" conaffinity="0"/>
+      <geom name="table_leg_back_left" type="cylinder" pos="-0.2 0.3 -0.1375" size="0.012 0.1375" material="table_legs" contype="0" conaffinity="0"/>
+      <geom name="table_leg_back_right" type="cylinder" pos="0.2 0.3 -0.1375" size="0.012 0.1375" material="table_legs" contype="0" conaffinity="0"/>
+      <site name="tabletop_center" type="sphere" pos="0 0 0.026" size="0.003" rgba="1 1 1 0"/>
+    </body>
+
+    <body name="stack_target" mocap="true" pos="0.48 0 0.326">
+      <geom name="stack_target_geom" type="cylinder" size="0.04 0.001" material="stack_target" contype="0" conaffinity="0"/>
+      <site name="stack_target_center" type="sphere" pos="0 0 0" size="0.004" rgba="0.05 0.8 0.25 0.9"/>
+    </body>
+
+    <body name="red_cube" pos="0.44 -0.08 0.35">
+      <freejoint name="red_cube_freejoint"/>
+      <inertial pos="0 0 0" mass="0.08" diaginertia="0.000025 0.000025 0.000025"/>
+      <geom name="red_cube_geom" type="box" size="0.025 0.025 0.025" material="cube_red" friction="1.2 0.01 0.002"/>
+      <site name="red_cube_center" type="sphere" pos="0 0 0" size="0.0025" rgba="1 1 1 0"/>
+    </body>
+
+    <body name="blue_cube" pos="0.52 0.08 0.35">
+      <freejoint name="blue_cube_freejoint"/>
+      <inertial pos="0 0 0" mass="0.08" diaginertia="0.000025 0.000025 0.000025"/>
+      <geom name="blue_cube_geom" type="box" size="0.025 0.025 0.025" material="cube_blue" friction="1.2 0.01 0.002"/>
+      <site name="blue_cube_center" type="sphere" pos="0 0 0" size="0.0025" rgba="1 1 1 0"/>
+    </body>
+  </worldbody>
+
+  <keyframe>
+    <key name="startup_pose"/>
+  </keyframe>
+
+</mujoco>
