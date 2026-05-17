@@ -213,7 +213,7 @@
                         </body>
                       </body>
                     </body>
-                  <body name="left_wrist_camera_target" pos="-0.01 0.175 -0.075"><site name="left_wrist_camera_target_site" type="sphere" pos="0 0 0" size="0.006" rgba="1 0.85 0.05 1" group="3" /></body><camera name="left_wrist_camera" pos="-0.01 0.085 -0.04" mode="targetbody" target="left_wrist_camera_target" fovy="85" /><site name="left_wrist_camera_site" type="sphere" pos="-0.01 0.085 -0.04" size="0.01" rgba="1 0.1 0.1 1" group="3" /></body>
+                  <body name="left_wrist_camera_target" pos="-0.01 0.175 -0.075" /><camera name="left_wrist_camera" pos="-0.01 0.085 -0.04" mode="targetbody" target="left_wrist_camera_target" fovy="85" /></body>
                 </body>
               </body>
             </body>
@@ -360,14 +360,14 @@
                         </body>
                       </body>
                     </body>
-                  <body name="right_wrist_camera_target" pos="-0.01 0.175 -0.075"><site name="right_wrist_camera_target_site" type="sphere" pos="0 0 0" size="0.006" rgba="1 0.85 0.05 1" group="3" /></body><camera name="right_wrist_camera" pos="-0.01 0.085 -0.04" mode="targetbody" target="right_wrist_camera_target" fovy="85" /><site name="right_wrist_camera_site" type="sphere" pos="-0.01 0.085 -0.04" size="0.01" rgba="0.1 0.3 1 1" group="3" /></body>
+                  <body name="right_wrist_camera_target" pos="-0.01 0.175 -0.075" /><camera name="right_wrist_camera" pos="-0.01 0.085 -0.04" mode="targetbody" target="right_wrist_camera_target" fovy="85" /></body>
                 </body>
               </body>
             </body>
           </body>
         </body>
       </body>
-    <camera name="chest_table_camera" pos="0.08 0 0.72" mode="targetbody" target="table" fovy="75" /><site name="chest_table_camera_site" type="sphere" pos="0.08 0 0.72" size="0.015" rgba="0.1 1 0.1 1" group="3" /></body>
+    <camera name="chest_table_camera" pos="0.08 0 0.72" mode="targetbody" target="table" fovy="75" /></body>
   </worldbody>
   <actuator>
     <position class="arm_joint" name="act_openarm_left_joint1" joint="openarm_left_joint1" />
