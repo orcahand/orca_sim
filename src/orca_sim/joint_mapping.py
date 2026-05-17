@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from collections.abc import Mapping
 
 from orca_core import canonical_joint_ids
@@ -45,10 +43,11 @@ def default_joint_name_to_scene_joint_name(
     scene_file: str,
     version: str,
 ) -> tuple[str | None, dict[str, str]]:
-    canonical = canonical_single_hand_joint_ids(version=version, hand_type="right")
     if version == "v1":
+        canonical = canonical_single_hand_joint_ids(version=version, hand_type="right")
         local_mapping = {joint: joint for joint in canonical}
     elif version == "v2":
+        canonical = tuple(V2_LOCAL_SCENE_JOINT_BY_CANONICAL)
         local_mapping = V2_LOCAL_SCENE_JOINT_BY_CANONICAL
     else:
         raise FileNotFoundError(f"Unsupported embodiment version for joint mapping: {version}")
@@ -61,7 +60,8 @@ def default_joint_name_to_scene_joint_name(
         return None, mapping
 
     if "left" in scene_file:
-        canonical = canonical_single_hand_joint_ids(version=version, hand_type="left")
+        if version == "v1":
+            canonical = canonical_single_hand_joint_ids(version=version, hand_type="left")
         return (
             "left",
             {joint: f"left_{local_mapping[joint]}" for joint in canonical},
