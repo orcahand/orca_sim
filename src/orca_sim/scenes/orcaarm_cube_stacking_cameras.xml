@@ -1,0 +1,28 @@
+<?xml version="1.0" ?>
+<mujoco model="ORCA arm cube stacking camera scene">
+
+  <include file="cube_stacking.xml"/>
+
+  <asset>
+    <material name="robot_pedestal" rgba="0.32 0.33 0.34 1" shininess="0.2" specular="0.25"/>
+  </asset>
+
+  <worldbody>
+    <body name="robot_pedestal" pos="0 0 0.04">
+      <geom name="robot_pedestal_geom" type="box" size="0.17 0.13 0.04" material="robot_pedestal" contype="0" conaffinity="0"/>
+    </body>
+  </worldbody>
+
+  <include file="includes/orcabot_with_cameras.xml"/>
+
+  <!-- Only the OpenArm joints differ from the imported OrcaArm defaults here;
+       hand joint qpos and hand actuator ctrl values remain at their defaults. -->
+  <keyframe>
+    <key
+      name="orcaarm_home"
+      qpos="0.44 -0.08 0.35 1 0 0 0 0.52 0.08 0.35 1 0 0 0 0 0.004 0 1.52 1.570796 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.005 0 1.53 -1.570796 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+      ctrl="0 0.004 0 1.52 1.570796 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.005 0 1.53 -1.570796 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+    />
+  </keyframe>
+
+</mujoco>

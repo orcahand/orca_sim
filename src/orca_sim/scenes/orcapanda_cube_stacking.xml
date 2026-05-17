@@ -1,0 +1,28 @@
+<?xml version="1.0" ?>
+<mujoco model="ORCA Panda cube stacking scene">
+
+  <include file="cube_stacking.xml"/>
+
+  <asset>
+    <material name="orcapanda_pedestal" rgba="0.32 0.33 0.34 1" shininess="0.2" specular="0.25"/>
+  </asset>
+
+  <worldbody>
+    <camera name="orcapanda_overview" pos="0.88 -0.78 0.78" mode="targetbody" target="table" fovy="68"/>
+
+    <body name="orcapanda_pedestal" pos="-0.05 0 0.04">
+      <geom name="orcapanda_pedestal_geom" type="box" size="0.16 0.13 0.04" material="orcapanda_pedestal" contype="0" conaffinity="0"/>
+    </body>
+  </worldbody>
+
+  <include file="includes/orcapanda_namespaced.xml"/>
+
+  <keyframe>
+    <key
+      name="orcapanda_home"
+      qpos="0.44 -0.08 0.35 1 0 0 0 0.52 0.08 0.35 1 0 0 0 0 -0.7 0 -2.1 0 1.7 0.785 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+      ctrl="0 -0.7 0 -2.1 0 1.7 0.785 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+    />
+  </keyframe>
+
+</mujoco>
