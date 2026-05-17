@@ -70,6 +70,25 @@ env = OrcaHandCombinedExtended(version="v1")  # loads the v1 hand
 See our [`random_policy.py`](random_policy.py) example to see how to instantiate and interface an ORCA hand through the Gymnasium API.
 If you want a lower-level demo built directly on the shared `orca_core` hand helpers, see [`hand_demo.py`](hand_demo.py).
 
+## Sample task: cube stacking
+
+Two cubes on a table, available with no robot, OrcaArm, or OrcaPanda:
+
+```python
+from orca_sim import CubeStackingTabletop, OrcaArmCubeStacking, OrcaPandaCubeStacking
+
+env = OrcaArmCubeStacking()
+obs, info = env.reset(seed=0)
+obs, reward, terminated, truncated, info = env.step(env.action_space.sample())
+```
+Or use the OrcaPanda robot in the same way:
+
+```python
+env = OrcaPandaCubeStacking()
+obs, info = env.reset(seed=0)
+# ...
+```
+
 ## Sample task: in-hand cube orientation
 
 `orca_sim` now also ships a task-level example that augments the right hand with a free-floating cube whose one target face is colored red:
