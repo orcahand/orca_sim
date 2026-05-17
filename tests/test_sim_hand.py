@@ -14,8 +14,11 @@ import pytest
 from orca_core.joint_position import OrcaJointPositions
 
 from orca_sim import (
+    CubeStackingTabletop,
+    OrcaArmCubeStacking,
     OrcaHandRight,
     OrcaHandRightCubeOrientation,
+    OrcaPandaCubeStacking,
     SimOrcaHand,
     SimOrcaHandConfig,
 )
@@ -314,5 +317,183 @@ def test_task_env_delegates_reset_and_step_to_sim_hand(mocker, version: str) -> 
         hand_step = mocker.patch.object(env.hand, "step", wraps=env.hand.step)
         env.step(env.action_space.sample())
         hand_step.assert_called_once()
+    finally:
+        env.close()
+
+
+def test_cube_stacking_tabletop_loads_and_randomizes_cubes() -> None:
+    env = CubeStackingTabletop()
+    try:
+        obs_0, info_0 = env.reset(seed=0)
+        obs_1, info_1 = env.reset(seed=1)
+
+        assert env.version is None
+        assert obs_0.shape == env.observation_space.shape
+        assert obs_1.shape == env.observation_space.shape
+        assert env.action_space.shape == (0,)
+        assert set(info_0["cube_pos"]) == {"red_cube", "blue_cube"}
+        assert info_0["target_pos"].shape == (3,)
+
+        red_0 = info_0["cube_pos"]["red_cube"]
+        blue_0 = info_0["cube_pos"]["blue_cube"]
+        red_1 = info_1["cube_pos"]["red_cube"]
+        blue_1 = info_1["cube_pos"]["blue_cube"]
+        assert np.linalg.norm(red_0[:2] - blue_0[:2]) >= env.min_cube_spacing
+        assert np.linalg.norm(red_1[:2] - blue_1[:2]) >= env.min_cube_spacing
+        assert not np.allclose(red_0[:2], red_1[:2])
+        assert not np.allclose(blue_0[:2], blue_1[:2])
+        assert not np.allclose(info_0["target_pos"][:2], info_1["target_pos"][:2])
+
+        env.step(env.action_space.sample())
+    finally:
+        env.close()
+
+
+def test_orcaarm_cube_stacking_uses_home_keyframe_and_all_actuators() -> None:
+    pytest.importorskip("orca_arm")
+    env = OrcaArmCubeStacking()
+    try:
+        obs_0, info_0 = env.reset(seed=0)
+        obs_1, info_1 = env.reset(seed=1)
+
+        assert obs_0.shape == env.observation_space.shape
+        assert obs_1.shape == env.observation_space.shape
+        assert env.action_space.shape == (env.model.nu,)
+        assert len(env.actuator_names) == env.model.nu
+        assert set(info_0["cube_pos"]) == {"red_cube", "blue_cube"}
+        assert not info_0["is_success"]
+        assert not np.allclose(
+            info_0["cube_pos"]["red_cube"][:2],
+            info_1["cube_pos"]["red_cube"][:2],
+        )
+
+        obs, reward, terminated, truncated, info = env.step(env.action_space.sample())
+        assert obs.shape == env.observation_space.shape
+        assert isinstance(reward, float)
+        assert isinstance(terminated, bool)
+        assert isinstance(truncated, bool)
+        assert "is_success" in info
+    finally:
+        env.close()
+
+
+def test_orcaarm_cube_stacking_renders_camera_observations() -> None:
+    pytest.importorskip("orca_arm")
+    env = OrcaArmCubeStacking(camera_width=64, camera_height=48)
+    try:
+        env.reset(seed=0)
+        images = env.render_camera_observations()
+
+        assert set(images) == {
+            "chest_table_camera",
+            "left_wrist_camera",
+            "right_wrist_camera",
+        }
+        for image in images.values():
+            assert image.shape == (48, 64, 3)
+            assert image.dtype == np.uint8
+    finally:
+        env.close()
+
+
+def test_orcaarm_cube_stacking_supports_ordered_actuator_subset() -> None:
+    pytest.importorskip("orca_arm")
+    actuator_names = ("act_openarm_right_joint1", "act_openarm_left_joint1")
+    env = OrcaArmCubeStacking(actuator_names=actuator_names)
+    try:
+        env.reset(seed=0)
+
+        assert env.actuator_names == actuator_names
+        assert env.action_space.shape == (2,)
+        action = np.array([0.25, -0.5], dtype=np.float32)
+        env.step(action)
+
+        expected_ids = [env.model.actuator(name).id for name in actuator_names]
+        np.testing.assert_allclose(env.data.ctrl[expected_ids], action)
+    finally:
+        env.close()
+
+
+def test_orcaarm_cube_stacking_success_predicate() -> None:
+    pytest.importorskip("orca_arm")
+    env = OrcaArmCubeStacking(randomize_yaw=False)
+    try:
+        _, info = env.reset(
+            options={
+                "cube_positions": {
+                    "blue_cube": np.array([0.45, 0.0, 0.35], dtype=np.float64),
+                    "red_cube": np.array([0.45, 0.0, 0.40], dtype=np.float64),
+                },
+                "target_position": np.array([0.45, 0.0, 0.326], dtype=np.float64),
+            }
+        )
+
+        assert info["xy_close"]
+        assert info["height_ok"]
+        assert info["target_xy_close"]
+        assert info["settled"]
+        assert info["is_success"]
+    finally:
+        env.close()
+
+
+def test_orcapanda_cube_stacking_uses_home_keyframe_and_all_actuators() -> None:
+    pytest.importorskip("orca_arm")
+    env = OrcaPandaCubeStacking()
+    try:
+        obs_0, info_0 = env.reset(seed=0)
+        obs_1, info_1 = env.reset(seed=1)
+
+        assert obs_0.shape == env.observation_space.shape
+        assert obs_1.shape == env.observation_space.shape
+        assert env.action_space.shape == (env.model.nu,)
+        assert env.model.nu == 24
+        assert len(env.actuator_names) == env.model.nu
+        assert set(info_0["cube_pos"]) == {"red_cube", "blue_cube"}
+        assert not info_0["is_success"]
+        assert not np.allclose(
+            info_0["cube_pos"]["red_cube"][:2],
+            info_1["cube_pos"]["red_cube"][:2],
+        )
+
+        obs, reward, terminated, truncated, info = env.step(env.action_space.sample())
+        assert obs.shape == env.observation_space.shape
+        assert isinstance(reward, float)
+        assert isinstance(terminated, bool)
+        assert isinstance(truncated, bool)
+        assert "is_success" in info
+    finally:
+        env.close()
+
+
+def test_orcapanda_cube_stacking_renders_camera_observations() -> None:
+    pytest.importorskip("orca_arm")
+    env = OrcaPandaCubeStacking(camera_width=64, camera_height=48)
+    try:
+        env.reset(seed=0)
+        images = env.render_camera_observations()
+
+        assert set(images) == {"orcapanda_overview", "topdown", "angled"}
+        for image in images.values():
+            assert image.shape == (48, 64, 3)
+            assert image.dtype == np.uint8
+    finally:
+        env.close()
+
+
+def test_orcapanda_cube_stacking_supports_ordered_actuator_subset() -> None:
+    pytest.importorskip("orca_arm")
+    actuator_names = ("act_panda_joint1", "act_panda_joint2")
+    env = OrcaPandaCubeStacking(actuator_names=actuator_names)
+    try:
+        env.reset(seed=0)
+
+        assert env.actuator_names == actuator_names
+        assert env.action_space.shape == (2,)
+        action = np.array([0.25, -0.5], dtype=np.float32)
+        env.step(action)
+
+        expected_ids = [env.model.actuator(name).id for name in actuator_names]
+        np.testing.assert_allclose(env.data.ctrl[expected_ids], action)
     finally:
         env.close()
