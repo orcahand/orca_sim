@@ -5,7 +5,7 @@ from orca_sim.versions import list_versions, resolve_scene_path
 
 def register_envs() -> None:
     registry = gym.registry
-    specs = {
+    versioned_specs = {
         "OrcaHandLeft": ("orca_sim.envs:OrcaHandLeft", "scene_left.xml"),
         "OrcaHandLeftExtended": (
             "orca_sim.envs:OrcaHandLeftExtended",
@@ -26,8 +26,22 @@ def register_envs() -> None:
             "scene_right_cube_orientation.xml",
         ),
     }
+    unversioned_specs = {
+        "CubeStackingTabletop": (
+            "orca_sim.task_envs:CubeStackingTabletop",
+            "cube_stacking.xml",
+        ),
+        "OrcaArmCubeStacking": (
+            "orca_sim.task_envs:OrcaArmCubeStacking",
+            "orcaarm_cube_stacking.xml",
+        ),
+        "OrcaPandaCubeStacking": (
+            "orca_sim.task_envs:OrcaPandaCubeStacking",
+            "orcapanda_cube_stacking.xml",
+        ),
+    }
     for version in list_versions():
-        for env_name, (entry_point, scene_file) in specs.items():
+        for env_name, (entry_point, scene_file) in versioned_specs.items():
             try:
                 resolve_scene_path(scene_file, version=version)
             except FileNotFoundError:
@@ -40,3 +54,12 @@ def register_envs() -> None:
                     entry_point=entry_point,
                     kwargs={"version": version},
                 )
+
+    for env_id, (entry_point, scene_file) in unversioned_specs.items():
+        try:
+            resolve_scene_path(scene_file)
+        except FileNotFoundError:
+            continue
+
+        if env_id not in registry:
+            gym.register(id=env_id, entry_point=entry_point)
