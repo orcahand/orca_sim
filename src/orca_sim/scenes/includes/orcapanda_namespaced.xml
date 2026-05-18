@@ -192,6 +192,8 @@
                         <inertial pos="0 0 0" quat="0.52671 0.47178 -0.52671 0.47178" mass="7.42253" diaginertia="132.904 128.659 109.533" />
                         <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="1 1 1 1" mesh="orcapanda_right_ForeArmStructure-Model" />
                         <geom type="mesh" rgba="1 1 1 1" mesh="orcapanda_right_ForeArmStructure-Model" />
+                        <body name="orcapanda_wrist_camera_target" pos="-0.01 0.175 -0.075" />
+                        <camera name="orcapanda_wrist_camera" pos="-0.01 0.085 -0.04" mode="targetbody" target="orcapanda_wrist_camera_target" fovy="85" />
                         <body name="orcahand_right_TopTower-Model_4a80d30e" pos="-0.01 0.0523 0" quat="0.5 -0.5 0.5 0.5">
                           <inertial pos="0 0 0" quat="0.497629 0.50236 -0.50236 0.497629" mass="0.185652" diaginertia="2.10033 1.64324 1.49927" />
                           <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="1 1 1 1" mesh="orcapanda_right_TopTower-Model" />

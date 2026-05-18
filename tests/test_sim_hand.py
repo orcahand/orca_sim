@@ -473,7 +473,12 @@ def test_orcapanda_cube_stacking_renders_camera_observations() -> None:
         env.reset(seed=0)
         images = env.render_camera_observations()
 
-        assert set(images) == {"orcapanda_overview", "topdown", "angled"}
+        assert set(images) == {
+            "orcapanda_overview",
+            "topdown",
+            "angled",
+            "orcapanda_wrist_camera",
+        }
         for image in images.values():
             assert image.shape == (48, 64, 3)
             assert image.dtype == np.uint8

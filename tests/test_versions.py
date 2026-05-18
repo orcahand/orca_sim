@@ -108,11 +108,18 @@ def test_orcapanda_cube_stacking_scene_loads_directly() -> None:
     assert model.nu == 24
     assert mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "panda_link0") >= 0
     assert mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_KEY, "orcapanda_home") >= 0
+    assert (
+        mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_CAMERA, "orcapanda_wrist_camera")
+        >= 0
+    )
 
 
 def test_orcapanda_cube_stacking_home_keyframe_sets_ready_pose() -> None:
     pytest.importorskip("orca_arm")
-    q_home = np.array([0.0, -0.7, 0.0, -2.1, 0.0, 1.7, 0.785], dtype=np.float64)
+    q_home = np.array(
+        [-0.1, -1.6, -0.1, -3.0718, -0.15, 2.85, -1.4027],
+        dtype=np.float64,
+    )
     model = mujoco.MjModel.from_xml_path(
         str((PACKAGE_ROOT / "scenes" / "orcapanda_cube_stacking.xml").resolve())
     )

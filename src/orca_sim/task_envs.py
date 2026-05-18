@@ -633,7 +633,12 @@ class OrcaPandaCubeStacking(OrcaArmCubeStacking):
     """Single-arm OrcaPanda cube stacking task in the shared tabletop scene."""
 
     DEFAULT_KEYFRAME = "orcapanda_home"
-    DEFAULT_CAMERA_NAMES = ("orcapanda_overview", "topdown", "angled")
+    DEFAULT_CAMERA_NAMES = (
+        "orcapanda_overview",
+        "topdown",
+        "angled",
+        "orcapanda_wrist_camera",
+    )
 
     def __init__(
         self,
