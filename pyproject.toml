@@ -15,16 +15,35 @@ dependencies = [
   "gymnasium>=0.29",
   "mujoco>=3.1",
   "numpy>=1.26",
+  "orca_core @ git+https://github.com/orcahand/orca_core.git@91ef976cdf8206d2b937f765b1d1bce091b9e2c5",
 ]
 
 [project.optional-dependencies]
 dev = [
   "pytest>=8",
+  "pytest-mock>=3.14",
+]
+arm = [
+  "mani_skill @ git+https://github.com/fracapuano/ManiSkill.git@3dc8c0c52c71c2f41932eb9f0371ca340cf1b038",
+  "torch",
+  "sapien",
+  "transforms3d",
+  "imageio",
+  "imageio-ffmpeg",
+  "orca_arm",
+  "pin"
+]
+
+lerobot = [
+  "lerobot"
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = [
+  "slow: long-running test intended primarily for CI",
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -36,6 +55,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 orca_sim = [
   "*.xml",
+  "scenes/*.xml",
   "scenes/*/*.xml",
   "assets/mjcf/*.xml",
   "assets/mjcf/*/*.xml",
@@ -45,5 +65,9 @@ orca_sim = [
   "assets/mjcf/right/collision/*.stl",
   "models/mjcf/*.mjcf",
   "models/*/*.mjcf",
+  "models/*/assets/*.xml",
+  "models/*/assets/*/*.stl",
+  "models/*/mjcf/*.xml",
+  "models/*/mjcf/*.mjcf",
   "models/*/assets/mjcf/*/*.stl",
 ]

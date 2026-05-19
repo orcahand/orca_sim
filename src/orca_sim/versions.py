@@ -36,15 +36,21 @@ def resolve_version(version: str | None = None) -> str:
 
 
 def resolve_scene_path(scene_file: str, *, version: str | None = None) -> Path:
+    unversioned_scene_path = SCENES_ROOT / scene_file
     if version is not None:
         resolved_version = resolve_version(version)
         scene_path = SCENES_ROOT / resolved_version / scene_file
-        if not scene_path.exists():
-            raise FileNotFoundError(
-                f"Embodiment version '{resolved_version}' is missing required scene file: "
-                f"{scene_file}"
-            )
-        return scene_path
+        if scene_path.exists():
+            return scene_path
+        if unversioned_scene_path.exists():
+            return unversioned_scene_path
+        raise FileNotFoundError(
+            f"Embodiment version '{resolved_version}' is missing required scene file "
+            f"or unversioned scene: {scene_file}"
+        )
+
+    if unversioned_scene_path.exists():
+        return unversioned_scene_path
 
     for candidate_version in _scene_resolution_order():
         scene_path = SCENES_ROOT / candidate_version / scene_file
@@ -53,7 +59,7 @@ def resolve_scene_path(scene_file: str, *, version: str | None = None) -> Path:
 
     known_versions = ", ".join(list_versions()) or "none"
     raise FileNotFoundError(
-        f"No embodiment version provides scene file '{scene_file}'. "
+        f"No unversioned scene or embodiment version provides scene file '{scene_file}'. "
         f"Available versions: {known_versions}"
     )
 

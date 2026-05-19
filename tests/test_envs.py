@@ -1,7 +1,9 @@
 import numpy as np
 import pytest
 
-from orca_sim import OrcaHandCombined, OrcaHandLeft, OrcaHandRight
+from orca_core.base_hand import BaseHand
+
+from orca_sim import OrcaHandCombined, OrcaHandLeft, OrcaHandRight, SimOrcaHand
 
 
 @pytest.mark.parametrize(
@@ -39,6 +41,18 @@ def test_env_reset_and_step_smoke(
         env.close()
 
 
+@pytest.mark.parametrize("version", ["v1", "v2"])
+def test_envs_compose_shared_sim_hand_backend(version: str) -> None:
+    env = OrcaHandRight(version=version)
+    try:
+        assert isinstance(env.hand, SimOrcaHand)
+        assert isinstance(env.hand, BaseHand)
+        assert env.hand.version == version
+        assert env.hand.scene_path == env.scene_path
+    finally:
+        env.close()
+
+
 def test_reset_accepts_explicit_qpos_and_qvel() -> None:
     env = OrcaHandRight()
     try:
@@ -55,12 +69,62 @@ def test_reset_accepts_explicit_qpos_and_qvel() -> None:
         env.close()
 
 
+@pytest.mark.parametrize("version", ["v1", "v2"])
+def test_sim_hand_clamps_joint_commands(version: str) -> None:
+    hand = SimOrcaHand(scene_file="scene_right.xml", version=version)
+    try:
+        hand.reset()
+        joint_name = hand.config.joint_ids[0]
+        hand.set_joint_positions({joint_name: hand.action_high[0] + 10.0})
+        joint_positions = hand.get_joint_position().as_dict()
+
+        assert joint_positions[joint_name] == pytest.approx(hand.action_high[0])
+    finally:
+        hand.close()
+
+
+@pytest.mark.parametrize("version", ["v1", "v2"])
+def test_sim_hand_preserves_unspecified_joint_commands(version: str) -> None:
+    hand = SimOrcaHand(scene_file="scene_right.xml", version=version)
+    try:
+        hand.reset()
+        first_joint, second_joint = hand.config.joint_ids[:2]
+
+        hand.set_joint_positions(
+            {
+                first_joint: float(hand.action_low[0]),
+                second_joint: float(hand.action_high[1]),
+            }
+        )
+        hand.set_joint_positions({second_joint: 0.0})
+
+        joint_positions = hand.get_joint_position().as_dict()
+        assert joint_positions[first_joint] == pytest.approx(hand.action_low[0])
+        assert joint_positions[second_joint] == pytest.approx(0.0)
+    finally:
+        hand.close()
+
+
+@pytest.mark.parametrize("version", ["v1", "v2"])
+def test_sim_hand_steps_simulation_without_gym(version: str) -> None:
+    hand = SimOrcaHand(scene_file="scene_right.xml", version=version)
+    try:
+        obs = hand.reset()
+        next_obs = hand.step(hand.action_high + 10.0)  # overwrap all motors
+
+        assert obs.shape == next_obs.shape == (hand.data.qpos.size + hand.data.qvel.size,)
+        np.testing.assert_allclose(hand.data.ctrl[list(hand.config.actuator_ids)], hand.action_high)
+    finally:
+        hand.close()
+
+
 def test_step_clips_actions_to_actuator_limits() -> None:
     env = OrcaHandLeft()
     try:
         env.reset()
         env.step(env.action_high + 10.0)
-        np.testing.assert_allclose(env.data.ctrl, env.action_high)
+        # indexing of joint ids is specified by the hand config
+        np.testing.assert_allclose(env.data.ctrl[list(env.hand.config.actuator_ids)], env.action_high)
     finally:
         env.close()
 

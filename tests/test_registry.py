@@ -22,7 +22,13 @@ def test_register_envs_is_idempotent_and_envs_can_be_made() -> None:
         ("OrcaHandRightCubeOrientation-v2", (51,), (17,), False),
         ("OrcaHandCombined-v1", (68,), (34,), True),
         ("OrcaHandCombined-v2", (68,), (34,), True),
+        ("CubeStackingTabletop", (26,), (0,), False),
+        ("OrcaArmCubeStacking", (114,), (44,), False),
+        ("OrcaPandaCubeStacking", (74,), (24,), False),
     ]:
+        if env_id in {"OrcaArmCubeStacking", "OrcaPandaCubeStacking"}:
+            pytest.importorskip("orca_arm")
+
         assert env_id in gym.registry
 
         env = gym.make(env_id)
@@ -33,6 +39,12 @@ def test_register_envs_is_idempotent_and_envs_can_be_made() -> None:
             assert env.action_space.shape == action_shape
             if expect_empty_info:
                 assert info == {}
+            elif env_id in {
+                "CubeStackingTabletop",
+                "OrcaArmCubeStacking",
+                "OrcaPandaCubeStacking",
+            }:
+                assert set(info["cube_pos"]) == {"red_cube", "blue_cube"}
             else:
                 assert "red_face_up_alignment" in info
         finally:
