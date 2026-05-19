@@ -15,7 +15,7 @@ dependencies = [
   "gymnasium>=0.29",
   "mujoco>=3.1",
   "numpy>=1.26",
-  "orca_core @ git+https://github.com/orcahand/orca_core.git@54523bf2229f4995028f143ed29529cc98c643d5",
+  "orca_core @ git+https://github.com/orcahand/orca_core.git@91ef976cdf8206d2b937f765b1d1bce091b9e2c5",
 ]
 
 [project.optional-dependencies]
@@ -55,6 +55,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 orca_sim = [
   "*.xml",
+  "scenes/*.xml",
   "scenes/*/*.xml",
   "assets/mjcf/*.xml",
   "assets/mjcf/*/*.xml",
