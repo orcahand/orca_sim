@@ -19,6 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+  "build>=1",
   "pytest>=8",
 ]
 
@@ -46,4 +47,8 @@ orca_sim = [
   "models/mjcf/*.mjcf",
   "models/*/*.mjcf",
   "models/*/assets/mjcf/*/*.stl",
+  "models/*/assets/*.xml",
+  "models/*/assets/*/*.stl",
+  "models/*/mjcf/*.mjcf",
+  "models/*/mjcf/*.xml",
 ]
