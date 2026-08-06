@@ -6,6 +6,13 @@
   <include file="../../models/v2/mjcf/orcahand_right.mjcf"/>
 
   <worldbody>
+    <camera
+      name="closeup"
+      mode="targetbody"
+      target="task_cube"
+      pos="0.48 -0.34 0.38"
+      fovy="42"
+    />
     <body name="right_mount" pos="0 0 0.16" quat="0 0.70710678 0.70710678 0">
       <include file="../../models/v2/mjcf/orcahand_right_body.xml"/>
     </body>
